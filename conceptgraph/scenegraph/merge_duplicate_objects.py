@@ -16,11 +16,12 @@ from conceptgraph.slam.slam_classes import MapObjectList
 
 from conceptgraph.slam.utils import filter_objects, merge_objects
 
+
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--result_path", type=str, required=True)
     parser.add_argument("--savefile", type=str, required=True)
-    
+
     # To inspect the results of merge_overlap_objects
     # This is mainly to quickly try out different thresholds
     parser.add_argument("--merge_overlap_thresh", type=float, default=-1)
@@ -28,8 +29,9 @@ def get_parser():
     parser.add_argument("--merge_text_sim_thresh", type=float, default=-1)
     parser.add_argument("--obj_min_points", type=int, default=0)
     parser.add_argument("--obj_min_detections", type=int, default=0)
-    
+
     return parser
+
 
 if __name__ == "__main__":
     parser = get_parser()
@@ -39,14 +41,14 @@ if __name__ == "__main__":
 
     with gzip.open(result_path, "rb") as f:
         results = pickle.load(f)
-        
+
     cfg = results['cfg']
     class_names = results['class_names']
     class_colors = results['class_colors']
-        
+
     objects = MapObjectList()
     objects.load_serializable(results['objects'])
-    
+
     # Run the post-processing filtering and merging in instructed to do so
     cfg.obj_min_points = args.obj_min_points
     cfg.obj_min_detections = args.obj_min_detections
@@ -55,7 +57,7 @@ if __name__ == "__main__":
     cfg.merge_text_sim_thresh = args.merge_text_sim_thresh
     objects = filter_objects(cfg, objects)
     objects = merge_objects(cfg, objects)
-    
+
     # if not args.no_clip:
     #     print("Initializing CLIP model...")
     #     clip_model, _, clip_preprocess = open_clip.create_model_and_transforms("ViT-H-14", "laion2b_s32b_b79k")
@@ -64,7 +66,7 @@ if __name__ == "__main__":
     #     print("Done initializing CLIP model.")
 
     cmap = matplotlib.colormaps.get_cmap("turbo")
-    
+
     # Handle the background objects if they exist
     print(results.keys())
     bg_objects = None
@@ -74,11 +76,11 @@ if __name__ == "__main__":
 
         pcds_bg = copy.deepcopy(bg_objects.get_values("pcd"))
         bboxes_bg = copy.deepcopy(bg_objects.get_values("bbox"))
-        
+
         indices_bg = np.arange(len(objects), len(objects) + len(bg_objects))
-        
+
         objects.extend(bg_objects)
-    
+
     # pcds = copy.deepcopy(objects.get_values("pcd"))
     # bboxes = copy.deepcopy(objects.get_values("bbox"))
 
@@ -87,8 +89,10 @@ if __name__ == "__main__":
 
     objects = objects.to_serializable()
     # print(len(objects))
-    
-    print(f"\nStarted with {len(results['objects'])} objects then filtered to {len(objects)} objects\n")
+
+    print(
+        f"\nStarted with {len(results['objects'])} objects then filtered to {len(objects)} objects\n"
+    )
 
     # Save the results
     # If the parent directory doesn't exist, create it
@@ -96,4 +100,3 @@ if __name__ == "__main__":
         os.makedirs(os.path.dirname(args.savefile), exist_ok=True)
     with gzip.open(args.savefile, "wb") as f:
         pickle.dump(objects, f)
-    

@@ -21,6 +21,7 @@ from PIL import Image
 from scipy.spatial.transform import Rotation
 from tqdm import tqdm, trange
 
+
 @dataclass
 class ProgramArgs:
     datapath: str = "/home/krishna/data/record3d/krishna-bcs-room"
@@ -65,8 +66,10 @@ def write_depth(outpath, depth):
     depth = Image.fromarray(depth)
     depth.save(outpath)
 
+
 def write_conf(outpath, conf):
     np.save(outpath, conf)
+
 
 def write_pose(outpath, pose):
     np.save(outpath, pose.astype(np.float32))
@@ -84,14 +87,17 @@ def get_poses(metadata_dict: dict) -> int:
     # NB: Record3D / scipy use "scalar-last" format quaternions (x y z w)
     # https://fzheng.me/2017/11/12/quaternion_conventions_en/
     camera_to_worlds = np.concatenate(
-        [Rotation.from_quat(poses_data[:, :4]).as_matrix(), poses_data[:, 4:, None]],
+        [
+            Rotation.from_quat(poses_data[:, :4]).as_matrix(), poses_data[:, 4:,
+                                                                          None]
+        ],
         axis=-1,
     ).astype(np.float32)
 
     homogeneous_coord = np.zeros_like(camera_to_worlds[..., :1, :])
     homogeneous_coord[..., :, 3] = 1
     camera_to_worlds = np.concatenate([camera_to_worlds, homogeneous_coord], -2)
-    
+
     return camera_to_worlds
 
 
@@ -137,21 +143,24 @@ def get_intrinsics(metadata_dict: dict, downscale_factor: float = 7.5) -> int:
 
 def main():
     args = tyro.cli(ProgramArgs)
-    
+
     metadata = None
     with open(os.path.join(args.datapath, "metadata"), "r") as f:
         metadata = json.load(f)
-    
+
     # Keys in metadata dict
     # h, w, K, fps, dw, dh, initPose, poses, cameraType, frameTimestamps
     # print(metadata.keys())
 
     poses = get_poses(metadata)
     intrinsics_dict = get_intrinsics(metadata)
-    
-    color_paths = natsorted(glob.glob(os.path.join(args.datapath, "rgbd", "*.jpg")))
-    depth_paths = natsorted(glob.glob(os.path.join(args.datapath, "rgbd", "*.depth")))
-    conf_paths = natsorted(glob.glob(os.path.join(args.datapath, "rgbd", "*.conf")))
+
+    color_paths = natsorted(
+        glob.glob(os.path.join(args.datapath, "rgbd", "*.jpg")))
+    depth_paths = natsorted(
+        glob.glob(os.path.join(args.datapath, "rgbd", "*.depth")))
+    conf_paths = natsorted(
+        glob.glob(os.path.join(args.datapath, "rgbd", "*.conf")))
 
     os.makedirs(os.path.join(args.datapath, "rgb"), exist_ok=True)
     os.makedirs(os.path.join(args.datapath, "conf"), exist_ok=True)
@@ -178,12 +187,15 @@ def main():
         conf = load_conf(conf_paths[i])
         basename = os.path.splitext(os.path.basename(color_paths[i]))[0]
         # color_path = os.path.splitext(os.path.basename(color_paths[i]))[0] + ".png"
-        write_color(os.path.join(args.datapath, "rgb", basename + ".png"), color)
+        write_color(os.path.join(args.datapath, "rgb", basename + ".png"),
+                    color)
         # depth_path = os.path.splitext(os.path.basename(depth_paths[i]))[0] + ".png"
-        write_depth(os.path.join(args.datapath, "depth", basename + ".png"), depth)
+        write_depth(os.path.join(args.datapath, "depth", basename + ".png"),
+                    depth)
         # conf_path = os.path.splitext(os.path.basename(conf_paths[i]))[0] + ".npy"
         write_conf(os.path.join(args.datapath, "conf", basename + ".npy"), conf)
-        write_pose(os.path.join(args.datapath, "poses", basename + ".npy"), poses[i])
+        write_pose(os.path.join(args.datapath, "poses", basename + ".npy"),
+                   poses[i])
         # c2w = poses[i]
         # frame = {
         #     "file_path": os.path.join("rgb", color_path),

@@ -53,6 +53,23 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def main(args: argparse.Namespace):
+    """
+
+export REPLICA_ROOT=/path/to/Replica
+
+export CG_FOLDER=/path/to/concept-graphs/
+export REPLICA_CONFIG_PATH=${CG_FOLDER}/conceptgraph/dataset/dataconfigs/replica/replica.yaml
+
+SCENE_NAME=room0
+python scripts/run_slam_rgb.py \
+    --dataset_root $REPLICA_ROOT \
+    --dataset_config $REPLICA_CONFIG_PATH \
+    --scene_id $SCENE_NAME \
+    --image_height 480 \
+    --image_width 640 \
+    --stride 5 \
+    --visualize
+    """
     if args.load_semseg:
         load_embeddings = True
         embedding_dir = "embed_semseg"

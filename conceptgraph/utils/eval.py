@@ -36,15 +36,17 @@ def compute_pred_gt_associations(pred, gt):
 
     return idx_pred_to_gt, idx_gt_to_pred
 
-def compute_confmatrix(
-    labels_pred, labels_gt, idx_pred_to_gt, idx_gt_to_pred, class_names
-):
+
+def compute_confmatrix(labels_pred, labels_gt, idx_pred_to_gt, idx_gt_to_pred,
+                       class_names):
     labels_gt = labels_gt[idx_pred_to_gt]
     # num_classes = labels_gt.max().item() + 1
     # print(num_classes)
     num_classes = len(class_names)
     print(num_classes)
-    confmatrix = torch.zeros(num_classes, num_classes, device=labels_pred.device)
+    confmatrix = torch.zeros(num_classes,
+                             num_classes,
+                             device=labels_pred.device)
     for class_gt_int in range(num_classes):
         tensor_gt_class = torch.eq(labels_gt, class_gt_int).long()
         for class_pred_int in range(num_classes):
@@ -67,19 +69,17 @@ def compute_metrics(confmatrix, class_names):
     f1score = np.zeros((num_classes))
 
     for _idx in range(num_classes):
-        ious[_idx] = confmatrix[_idx, _idx] / (
-            max(
-                1,
-                confmatrix[_idx, :].sum()
-                + confmatrix[:, _idx].sum()
-                - confmatrix[_idx, _idx],
-            )
-        )
-        recall[_idx] = confmatrix[_idx, _idx] / max(1, confmatrix[_idx, :].sum())
-        precision[_idx] = confmatrix[_idx, _idx] / max(1, confmatrix[:, _idx].sum())
-        f1score[_idx] = (
-            2 * precision[_idx] * recall[_idx] / max(1, precision[_idx] + recall[_idx])
-        )
+        ious[_idx] = confmatrix[_idx, _idx] / (max(
+            1,
+            confmatrix[_idx, :].sum() + confmatrix[:, _idx].sum() -
+            confmatrix[_idx, _idx],
+        ))
+        recall[_idx] = confmatrix[_idx, _idx] / max(1,
+                                                    confmatrix[_idx, :].sum())
+        precision[_idx] = confmatrix[_idx, _idx] / max(
+            1, confmatrix[:, _idx].sum())
+        f1score[_idx] = (2 * precision[_idx] * recall[_idx] /
+                         max(1, precision[_idx] + recall[_idx]))
 
     fmiou = (ious * confmatrix.sum(1) / confmatrix.sum()).sum()
     # print(f"iou: {ious}")

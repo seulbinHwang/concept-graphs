@@ -42,9 +42,11 @@ from transformers.modeling_outputs import (
 try:
     LLAVA_PYTHON_PATH = os.environ["LLAVA_PYTHON_PATH"]
 except KeyError:
-    print("Please set the environment variable LLAVA_PYTHON_PATH to the path of the LLaVA repository")
+    print(
+        "Please set the environment variable LLAVA_PYTHON_PATH to the path of the LLaVA repository"
+    )
     sys.exit(1)
-    
+
 sys.path.append(LLAVA_PYTHON_PATH)
 
 from llava.conversation import SeparatorStyle, conv_templates
@@ -56,7 +58,6 @@ torch.autograd.set_grad_enabled(False)
 
 # Set logging verbosity for the transformers package to only log errors
 hf_logging.set_verbosity_error()
-
 
 DEFAULT_IMAGE_TOKEN = "<image>"
 DEFAULT_IMAGE_PATCH_TOKEN = "<im_patch>"
@@ -83,7 +84,8 @@ class LlavaLlamaModelTweaked(LlamaModel):
 
         # Instantiate the multimodal linear projection (vision-language)
         if hasattr(config, "use_mm_proj"):
-            self.mm_projector = nn.Linear(config.mm_hidden_size, config.hidden_size)
+            self.mm_projector = nn.Linear(config.mm_hidden_size,
+                                          config.hidden_size)
 
     def get_vision_tower(self):
         # Return the vision tower
@@ -116,7 +118,7 @@ class LlavaLlamaModelTweaked(LlamaModel):
             self.vision_tower = vision_tower
 
         vision_config = vision_tower.config
-        num_patches = (vision_config.image_size // vision_config.patch_size) ** 2
+        num_patches = (vision_config.image_size // vision_config.patch_size)**2
 
         # If using a vision tower, we need a multimodal projection (from vision to text)
         self.config.use_mm_proj = True
@@ -124,17 +126,15 @@ class LlavaLlamaModelTweaked(LlamaModel):
         self.config.mm_vision_select_layer = mm_vision_select_layer
 
         if not hasattr(self, "mm_projector"):
-            self.mm_projector = nn.Linear(
-                vision_config.hidden_size, self.config.hidden_size
-            )
+            self.mm_projector = nn.Linear(vision_config.hidden_size,
+                                          self.config.hidden_size)
 
         if pretrain_mm_mlp_adapter is not None:
-            mm_projector_weights = torch.load(
-                pretrain_mm_mlp_adapter, map_location="cpu"
-            )
-            self.mm_projector.load_state_dict(
-                {k.split(".")[-1]: v for k, v in mm_projector_weights.items()}
-            )
+            mm_projector_weights = torch.load(pretrain_mm_mlp_adapter,
+                                              map_location="cpu")
+            self.mm_projector.load_state_dict({
+                k.split(".")[-1]: v for k, v in mm_projector_weights.items()
+            })
 
         return dict(
             image_processor=image_processor,
@@ -153,26 +153,22 @@ class LlavaLlamaModelTweaked(LlamaModel):
                     image_features = []
                     for image in images:
                         image_forward_out = vision_tower(
-                            image.unsqueeze(0), output_hidden_states=True
-                        )
+                            image.unsqueeze(0), output_hidden_states=True)
                         select_hidden_state_layer = getattr(
-                            self.config, "mm_vision_select_layer", -1
-                        )
+                            self.config, "mm_vision_select_layer", -1)
                         # TODO (Krishna): Figure out why the zero-th dim is dropped (perhaps that is the
                         # global token?)
                         image_feature = select_hidden_state[:, 1:]
                         image_features.append(image_feature)
                     # image_features = [self.mm_projector(image_feature)[0] for image_feature in image_features]
                 else:
-                    image_forward_outs = vision_tower(
-                        images.to(vision_tower.dtype), output_hidden_states=True
-                    )
+                    image_forward_outs = vision_tower(images.to(
+                        vision_tower.dtype),
+                                                      output_hidden_states=True)
                     select_hidden_state_layer = getattr(
-                        self.config, "mm_vision_select_layer", -1
-                    )
+                        self.config, "mm_vision_select_layer", -1)
                     select_hidden_state = image_forward_outs.hidden_states[
-                        select_hidden_state_layer
-                    ]
+                        select_hidden_state_layer]
                     image_features = select_hidden_state[:, 1:].to(images.dtype)
                     # image_features = self.mm_projector(image_features)
             return image_features
@@ -201,7 +197,8 @@ class LlavaLlamaModelTweaked(LlamaModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         vision_tower = self.get_vision_tower()
-        if vision_tower is not None and (input_ids.shape[1] != 1 or self.training):
+        if vision_tower is not None and (input_ids.shape[1] != 1 or
+                                         self.training):
             # If images are provided, but image features is not provided, compute the image_features
             # from the images passed in. (else, skip this step)
             if image_features is None and images is not None:
@@ -212,27 +209,23 @@ class LlavaLlamaModelTweaked(LlamaModel):
                         image_features = []
                         for image in images:
                             image_forward_out = vision_tower(
-                                image.unsqueeze(0), output_hidden_states=True
-                            )
+                                image.unsqueeze(0), output_hidden_states=True)
                             select_hidden_state_layer = getattr(
-                                self.config, "mm_vision_select_layer", -1
-                            )
+                                self.config, "mm_vision_select_layer", -1)
                             select_hidden_state = image_forward_out.hidden_states[
-                                select_hidden_state_layer
-                            ]
+                                select_hidden_state_layer]
                             image_feature = select_hidden_state[:, 1:]
                             image_features.append(image_feature)
                     else:
                         image_forward_outs = vision_tower(
-                            images.to(vision_tower.dtype), output_hidden_states=True
-                        )
+                            images.to(vision_tower.dtype),
+                            output_hidden_states=True)
                         select_hidden_state_layer = getattr(
-                            self.config, "mm_vision_select_layer", -1
-                        )
+                            self.config, "mm_vision_select_layer", -1)
                         select_hidden_state = image_forward_outs.hidden_states[
-                            select_hidden_state_layer
-                        ]
-                        image_features = select_hidden_state[:, 1:].to(images.dtype)
+                            select_hidden_state_layer]
+                        image_features = select_hidden_state[:, 1:].to(
+                            images.dtype)
                 if type(images) is list:
                     image_features = [
                         self.mm_projector(image_feature)[0]
@@ -251,9 +244,10 @@ class LlavaLlamaModelTweaked(LlamaModel):
 
             # TODO (Krishna): The following line from the original LLaVA impl seems like a hardcoded param
             # size. Replace this by reading in these dims from the config file in future.
-            dummy_image_features = torch.zeros(
-                256, 1024, device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
+            dummy_image_features = torch.zeros(256,
+                                               1024,
+                                               device=inputs_embeds.device,
+                                               dtype=inputs_embeds.dtype)
             dummy_image_features = self.mm_projector(dummy_image_features)
             # (Krishna): If no image_features are passed as input, feed the dummy image features through
             if image_features is None:
@@ -261,69 +255,62 @@ class LlavaLlamaModelTweaked(LlamaModel):
 
             new_input_embeds = []
             cur_image_idx = 0
-            for cur_input_ids, cur_input_embeds in zip(input_ids, inputs_embeds):
-                if (cur_input_ids == vision_tower.config.im_patch_token).sum() == 0:
+            for cur_input_ids, cur_input_embeds in zip(input_ids,
+                                                       inputs_embeds):
+                if (cur_input_ids == vision_tower.config.im_patch_token
+                   ).sum() == 0:
                     # multimodal LLM, but the current sample is not multimodal
-                    cur_input_embeds = (
-                        cur_input_embeds + (0.0 * dummy_image_features).sum()
-                    )
+                    cur_input_embeds = (cur_input_embeds +
+                                        (0.0 * dummy_image_features).sum())
                     new_input_embeds.append(cur_input_embeds)
                     cur_image_idx += 1
                     continue
                 if vision_tower.config.use_im_start_end:
                     cur_image_features = image_features[cur_image_idx]
                     num_patches = cur_image_features.shape[0]
-                    if (cur_input_ids == vision_tower.config.im_start_token).sum() != (
-                        cur_input_ids == vision_tower.config.im_end_token
-                    ).sum():
+                    if (cur_input_ids == vision_tower.config.im_start_token
+                       ).sum() != (cur_input_ids ==
+                                   vision_tower.config.im_end_token).sum():
                         raise ValueError(
                             "The number of image start tokens and image end tokens should be the same."
                         )
                     image_start_tokens = torch.where(
-                        cur_input_ids == vision_tower.config.im_start_token
-                    )[0]
+                        cur_input_ids == vision_tower.config.im_start_token)[0]
                     for image_start_token_pos in image_start_tokens:
                         cur_image_features = image_features[cur_image_idx].to(
-                            device=cur_input_embeds.device
-                        )
+                            device=cur_input_embeds.device)
                         num_patches = cur_image_features.shape[0]
-                        if (
-                            cur_input_ids[image_start_token_pos + num_patches + 1]
-                            != vision_tower.config.im_end_token
-                        ):
+                        if (cur_input_ids[image_start_token_pos + num_patches +
+                                          1]
+                                != vision_tower.config.im_end_token):
                             raise ValueError(
                                 "The image end token should follow the image start token."
                             )
                         if orig_embeds_params is not None:
                             cur_new_input_embeds = torch.cat(
                                 (
-                                    cur_input_embeds[:image_start_token_pos].detach(),
-                                    cur_input_embeds[
-                                        image_start_token_pos : image_start_token_pos
-                                        + 1
-                                    ],
+                                    cur_input_embeds[:image_start_token_pos].
+                                    detach(),
+                                    cur_input_embeds[image_start_token_pos:
+                                                     image_start_token_pos + 1],
                                     cur_image_features,
-                                    cur_input_embeds[
-                                        image_start_token_pos
-                                        + num_patches
-                                        + 1 : image_start_token_pos
-                                        + num_patches
-                                        + 2
-                                    ],
-                                    cur_input_embeds[
-                                        image_start_token_pos + num_patches + 2 :
-                                    ].detach(),
+                                    cur_input_embeds[image_start_token_pos +
+                                                     num_patches +
+                                                     1:image_start_token_pos +
+                                                     num_patches + 2],
+                                    cur_input_embeds[image_start_token_pos +
+                                                     num_patches + 2:].detach(),
                                 ),
                                 dim=0,
                             )
                         else:
                             cur_new_input_embeds = torch.cat(
                                 (
-                                    cur_input_embeds[: image_start_token_pos + 1],
+                                    cur_input_embeds[:image_start_token_pos +
+                                                     1],
                                     cur_image_features,
-                                    cur_input_embeds[
-                                        image_start_token_pos + num_patches + 1 :
-                                    ],
+                                    cur_input_embeds[image_start_token_pos +
+                                                     num_patches + 1:],
                                 ),
                                 dim=0,
                             )
@@ -332,36 +319,29 @@ class LlavaLlamaModelTweaked(LlamaModel):
                 else:
                     cur_image_features = image_features[cur_image_idx]
                     num_patches = cur_image_features.shape[0]
-                    if (
-                        cur_input_ids == vision_tower.config.im_patch_token
-                    ).sum() != num_patches:
+                    if (cur_input_ids == vision_tower.config.im_patch_token
+                       ).sum() != num_patches:
                         raise ValueError(
                             "The number of image patch tokens should be the same as the number of image patches."
                         )
                     masked_indices = torch.where(
-                        cur_input_ids == vision_tower.config.im_patch_token
-                    )[0]
+                        cur_input_ids == vision_tower.config.im_patch_token)[0]
                     mask_index_start = masked_indices[0]
-                    if (
-                        masked_indices
-                        != torch.arange(
+                    if (masked_indices != torch.arange(
                             mask_index_start,
                             mask_index_start + num_patches,
                             device=masked_indices.device,
                             dtype=masked_indices.dtype,
-                        )
-                    ).any():
+                    )).any():
                         raise ValueError(
-                            "The image patch tokens should be consecutive."
-                        )
+                            "The image patch tokens should be consecutive.")
                     if orig_embeds_params is not None:
                         cur_new_input_embeds = torch.cat(
                             (
                                 cur_input_embeds[:mask_index_start].detach(),
                                 cur_image_features,
-                                cur_input_embeds[
-                                    mask_index_start + num_patches :
-                                ].detach(),
+                                cur_input_embeds[mask_index_start +
+                                                 num_patches:].detach(),
                             ),
                             dim=0,
                         )
@@ -370,7 +350,8 @@ class LlavaLlamaModelTweaked(LlamaModel):
                             (
                                 cur_input_embeds[:mask_index_start],
                                 cur_image_features,
-                                cur_input_embeds[mask_index_start + num_patches :],
+                                cur_input_embeds[mask_index_start +
+                                                 num_patches:],
                             ),
                             dim=0,
                         )
@@ -397,7 +378,9 @@ class LlavaLlamaForCausalLMTweaked(LlamaForCausalLM):
         super().__init__(config)
         self.model = LlavaLlamaModelTweaked(config)
 
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size,
+                                 config.vocab_size,
+                                 bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -429,19 +412,13 @@ class LlavaLlamaForCausalLMTweaked(LlamaForCausalLM):
         image_features: Optional[Union[list, torch.FloatTensor]] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
-        output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
-        )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        output_attentions = (output_attentions if output_attentions is not None
+                             else self.config.output_attentions)
+        output_hidden_states = (output_hidden_states
+                                if output_hidden_states is not None else
+                                self.config.output_hidden_states)
+        return_dict = (return_dict if return_dict is not None else
+                       self.config.use_return_dict)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -502,15 +479,13 @@ class LlavaLlamaForCausalLMTweaked(LlamaForCausalLM):
         else:
             model_inputs = {"input_ids": input_ids}
 
-        model_inputs.update(
-            {
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-                "attention_mask": attention_mask,
-                "images": kwargs.get("images", None),
-                "image_features": kwargs.get("image_features", None),
-            }
-        )
+        model_inputs.update({
+            "past_key_values": past_key_values,
+            "use_cache": kwargs.get("use_cache"),
+            "attention_mask": attention_mask,
+            "images": kwargs.get("images", None),
+            "image_features": kwargs.get("image_features", None),
+        })
         return model_inputs
 
     def initialize_vision_tokenizer(
@@ -528,33 +503,33 @@ class LlavaLlamaForCausalLMTweaked(LlamaForCausalLM):
 
         if mm_use_im_start_end:
             num_new_tokens = tokenizer.add_tokens(
-                [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True
-            )
+                [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN],
+                special_tokens=True)
             self.resize_token_embeddings(len(tokenizer))
             (
                 vision_config.im_start_token,
                 vision_config.im_end_token,
             ) = tokenizer.convert_tokens_to_ids(
-                [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN]
-            )
+                [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN])
 
             if num_new_tokens > 0:
                 input_embeddings = self.get_input_embeddings().weight.data
                 output_embeddings = self.get_output_embeddings().weight.data
 
                 input_embeddings_avg = input_embeddings[:-num_new_tokens].mean(
-                    dim=0, keepdim=True
-                )
-                output_embeddings_avg = output_embeddings[:-num_new_tokens].mean(
-                    dim=0, keepdim=True
-                )
+                    dim=0, keepdim=True)
+                output_embeddings_avg = output_embeddings[:
+                                                          -num_new_tokens].mean(
+                                                              dim=0,
+                                                              keepdim=True)
 
                 input_embeddings[-num_new_tokens:] = input_embeddings_avg
                 output_embeddings[-num_new_tokens:] = output_embeddings_avg
 
             if tune_mm_mlp_adapter:
                 self.get_model().orig_embeds_params = [
-                    self.get_input_embeddings().weight.data.clone().to(device=device)
+                    self.get_input_embeddings().weight.data.clone().to(
+                        device=device)
                 ]
                 for p in self.get_input_embeddings().parameters():
                     p.requires_grad = True
@@ -562,15 +537,14 @@ class LlavaLlamaForCausalLMTweaked(LlamaForCausalLM):
                     p.requires_grad = False
 
             if pretrain_mm_mlp_adapter:
-                mm_projector_weights = torch.load(
-                    pretrain_mm_mlp_adapter, map_location="cpu"
-                )
-                embed_tokens_weight = mm_projector_weights["model.embed_tokens.weight"]
+                mm_projector_weights = torch.load(pretrain_mm_mlp_adapter,
+                                                  map_location="cpu")
+                embed_tokens_weight = mm_projector_weights[
+                    "model.embed_tokens.weight"]
                 assert num_new_tokens == 2
                 if input_embeddings.shape == embed_tokens_weight.shape:
                     input_embeddings[-num_new_tokens:] = embed_tokens_weight[
-                        -num_new_tokens:
-                    ]
+                        -num_new_tokens:]
                 elif embed_tokens_weight.shape[0] == num_new_tokens:
                     input_embeddings[-num_new_tokens:] = embed_tokens_weight
                 else:
@@ -580,11 +554,11 @@ class LlavaLlamaForCausalLMTweaked(LlamaForCausalLM):
                     )
 
         vision_config.im_patch_token = tokenizer.convert_tokens_to_ids(
-            [DEFAULT_IMAGE_PATCH_TOKEN]
-        )[0]
+            [DEFAULT_IMAGE_PATCH_TOKEN])[0]
 
 
 class LLaVaChat(object):
+
     def __init__(self, model_path, conv_mode="multimodal", num_gpus=1):
         self.model_path = model_path
         self.conv_mode = conv_mode
@@ -596,7 +570,9 @@ class LLaVaChat(object):
         else:
             kwargs = {
                 "device_map": "auto",
-                "max_memory": {i: "13GiB" for i in range(self.num_gpus)},
+                "max_memory": {
+                    i: "13GiB" for i in range(self.num_gpus)
+                },
             }
 
         # pytorch spends a substantial amount of time initializing default weights for
@@ -609,23 +585,24 @@ class LLaVaChat(object):
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
         # Initialize the model
         self.model = LlavaLlamaForCausalLMTweaked.from_pretrained(
-            self.model_path, torch_dtype=torch.float16, low_cpu_mem_usage=True, **kwargs
-        )
+            self.model_path,
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+            **kwargs)
         self.model.cuda()
 
         # Image preprocessor
         self.image_processor = CLIPImageProcessor.from_pretrained(
-            self.model.config.mm_vision_tower, torch_dtype=torch.float16
-        )
+            self.model.config.mm_vision_tower, torch_dtype=torch.float16)
 
-        self.mm_use_im_start_end = getattr(
-            self.model.config, "mm_use_im_start_end", False
-        )
-        self.tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
+        self.mm_use_im_start_end = getattr(self.model.config,
+                                           "mm_use_im_start_end", False)
+        self.tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN],
+                                  special_tokens=True)
         if self.mm_use_im_start_end:
             self.tokenizer.add_tokens(
-                [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True
-            )
+                [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN],
+                special_tokens=True)
 
         self.vision_tower = self.model.get_model().vision_tower[0]
         if self.vision_tower.device.type == "meta":
@@ -639,19 +616,16 @@ class LLaVaChat(object):
             self.vision_tower.to(device="cuda", dtype=torch.float16)
         self.vision_config = self.vision_tower.config
         self.vision_config.im_patch_token = self.tokenizer.convert_tokens_to_ids(
-            [DEFAULT_IMAGE_PATCH_TOKEN]
-        )[0]
+            [DEFAULT_IMAGE_PATCH_TOKEN])[0]
         self.vision_config.use_im_start_end = self.mm_use_im_start_end
         if self.mm_use_im_start_end:
             (
                 self.vision_config.im_start_token,
                 self.vision_config.im_end_token,
             ) = self.tokenizer.convert_tokens_to_ids(
-                [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN]
-            )
-        self.image_token_len = (
-            self.vision_config.image_size // self.vision_config.patch_size
-        ) ** 2
+                [DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN])
+        self.image_token_len = (self.vision_config.image_size //
+                                self.vision_config.patch_size)**2
 
         # # Initialize a conversation from template (default conv_mode is "multimodal")
         # # (conv_mode determines the conversation template to use from llava.conversation module)
@@ -659,14 +633,14 @@ class LLaVaChat(object):
 
         # # Cache for image features
         # self.image_features = None
-        
+
         self.reset()
-        
+
     def reset(self):
         # Initialize a conversation from template (default conv_mode is "multimodal")
         # (conv_mode determines the conversation template to use from llava.conversation module)
         self.conv = conv_templates[self.conv_mode].copy()
-        
+
         # Cache for image features
         self.image_features = None
 
@@ -677,13 +651,9 @@ class LLaVaChat(object):
         qs = query
         if image_features is not None:
             if self.mm_use_im_start_end:
-                qs = (
-                    qs
-                    + "\n"
-                    + DEFAULT_IM_START_TOKEN
-                    + DEFAULT_IMAGE_PATCH_TOKEN * self.image_token_len
-                    + DEFAULT_IM_END_TOKEN
-                )
+                qs = (qs + "\n" + DEFAULT_IM_START_TOKEN +
+                      DEFAULT_IMAGE_PATCH_TOKEN * self.image_token_len +
+                      DEFAULT_IM_END_TOKEN)
             else:
                 qs = qs + "\n" + DEFAULT_IMAGE_PATCH_TOKEN * self.image_token_len
             if self.image_features is None:
@@ -703,15 +673,11 @@ class LLaVaChat(object):
         # Cast to torch tensor and to GPU
         input_ids = torch.as_tensor(inputs.input_ids).cuda()
 
-        stop_str = (
-            self.conv.sep
-            if self.conv.sep_style != SeparatorStyle.TWO
-            else self.conv.sep2
-        )
+        stop_str = (self.conv.sep if self.conv.sep_style != SeparatorStyle.TWO
+                    else self.conv.sep2)
         keywords = [stop_str]
-        stopping_criteria = KeywordsStoppingCriteria(
-            keywords, self.tokenizer, input_ids
-        )
+        stopping_criteria = KeywordsStoppingCriteria(keywords, self.tokenizer,
+                                                     input_ids)
 
         with torch.inference_mode():
             output_ids = self.model.generate(
@@ -724,20 +690,18 @@ class LLaVaChat(object):
             )
 
         input_token_len = input_ids.shape[1]
-        n_diff_input_output = (
-            (input_ids != output_ids[:, :input_token_len]).sum().item()
-        )
+        n_diff_input_output = ((
+            input_ids != output_ids[:, :input_token_len]).sum().item())
         if n_diff_input_output > 0:
             print(
                 f"[Warning] {n_diff_input_output} output_ids are not the same as the input_ids"
             )
-        outputs = self.tokenizer.batch_decode(
-            output_ids[:, input_token_len:], skip_special_tokens=True
-        )[0]
+        outputs = self.tokenizer.batch_decode(output_ids[:, input_token_len:],
+                                              skip_special_tokens=True)[0]
         self.conv.append_message(self.conv.roles[1], outputs)
         outputs = outputs.strip()
         if outputs.endswith(stop_str):
-            outputs = outputs[: -len(stop_str)]
+            outputs = outputs[:-len(stop_str)]
         outputs = outputs.strip()
         return outputs
 
@@ -751,8 +715,6 @@ class LLaVaChat(object):
 
     def encode_image(self, image_tensor_half_cuda):
         return self.model.model.encode_image(image_tensor_half_cuda)
-    
-
 
 
 if __name__ == "__main__":
@@ -769,21 +731,22 @@ if __name__ == "__main__":
     parser.add_argument("--conv_mode", type=str, default="multimodal")
     parser.add_argument("--num_gpus", type=int, default=1)
     args = parser.parse_args()
-    
+
     if args.model_path is None:
-        try: 
+        try:
             args.model_path = os.environ["LLAVA_CKPT_PATH"]
         except KeyError:
-            print("Please provide a model path or set the environment variable LLAVA_CKPT_PATH")
+            print(
+                "Please provide a model path or set the environment variable LLAVA_CKPT_PATH"
+            )
             exit(1)
 
     chat = LLaVaChat(args.model_path, args.conv_mode, args.num_gpus)
     print("LLaVA chat initialized...")
 
     image = chat.load_image(args.image_file)
-    image_tensor = chat.image_processor.preprocess(image, return_tensors="pt")[
-        "pixel_values"
-    ][0]
+    image_tensor = chat.image_processor.preprocess(
+        image, return_tensors="pt")["pixel_values"][0]
     image_features = chat.encode_image(image_tensor[None, ...].half().cuda())
     # query = input("Enter a query ('q' to quit): ")
     query = "List the set of objects in this image."

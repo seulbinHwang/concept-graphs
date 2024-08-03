@@ -38,6 +38,7 @@ def write_pose(outpath, pose):
 
 
 class DemoApp:
+
     def __init__(self, savedir_name="saved-record3d", seq_name="debug"):
         self.event = Event()
         self.session = None
@@ -54,7 +55,8 @@ class DemoApp:
         """
         This method is called from non-main thread, therefore cannot be used for presenting UI.
         """
-        self.event.set()  # Notify the main thread to stop waiting and process new frame.
+        self.event.set(
+        )  # Notify the main thread to stop waiting and process new frame.
 
     def on_stream_stopped(self):
         print("Stream stopped")
@@ -96,7 +98,7 @@ class DemoApp:
             write_depth(savefile, self.depths[_i])
             savefile = os.path.join(savedir_poses, f"{fname}.npy")
             write_pose(savefile, self.poses[_i])
-        
+
         cv2.destroyallwindows()
         exit()
 
@@ -109,8 +111,8 @@ class DemoApp:
 
         if len(devs) <= dev_idx:
             raise RuntimeError(
-                "Cannot connect to device #{}, try different index.".format(dev_idx)
-            )
+                "Cannot connect to device #{}, try different index.".format(
+                    dev_idx))
 
         dev = devs[dev_idx]
         self.session = Record3DStream()
@@ -119,9 +121,8 @@ class DemoApp:
         self.session.connect(dev)  # Initiate connection and start capturing
 
     def get_intrinsic_mat_from_coeffs(self, coeffs):
-        return np.array(
-            [[coeffs.fx, 0, coeffs.tx], [0, coeffs.fy, coeffs.ty], [0, 0, 1]]
-        )
+        return np.array([[coeffs.fx, 0, coeffs.tx], [0, coeffs.fy, coeffs.ty],
+                         [0, 0, 1]])
 
     def start_processing_stream(self):
         while True:
@@ -133,8 +134,7 @@ class DemoApp:
             # print(f"Line 123, depth: {depth}")
             rgb = self.session.get_rgb_frame()
             intrinsic_mat = self.get_intrinsic_mat_from_coeffs(
-                self.session.get_intrinsic_mat()
-            )
+                self.session.get_intrinsic_mat())
             pose = (
                 self.session.get_camera_pose()
             )  # Quaternion + world position (accessible via camera_pose.[qx|qy|qz|qw|tx|ty|tz])
@@ -155,8 +155,7 @@ class DemoApp:
             self.imgs.append(rgb)
             self.depths.append(depth)
             self.poses.append(
-                [pose.qx, pose.qy, pose.qz, pose.qw, pose.tx, pose.ty, pose.tz]
-            )
+                [pose.qx, pose.qy, pose.qz, pose.qw, pose.tx, pose.ty, pose.tz])
 
             # Show the RGBD Stream
             cv2.imshow("RGB", rgb)
@@ -168,11 +167,17 @@ class DemoApp:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--savedir_name", type=str, default="saved-record3d", help="Dir to save data to")
-    parser.add_argument("--seq_name", type=str, default="debug", help="Unique name for captured trajectory")
+    parser.add_argument("--savedir_name",
+                        type=str,
+                        default="saved-record3d",
+                        help="Dir to save data to")
+    parser.add_argument("--seq_name",
+                        type=str,
+                        default="debug",
+                        help="Unique name for captured trajectory")
     args = parser.parse_args()
 
     app = DemoApp(savedir_name=args.savedir_name, seq_name=args.seq_name)
-    
+
     app.connect_to_device(dev_idx=0)
     app.start_processing_stream()

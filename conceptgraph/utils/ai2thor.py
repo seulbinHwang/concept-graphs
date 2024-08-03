@@ -12,9 +12,11 @@ from ai2thor.controller import Controller
 import torch
 from tqdm import trange
 
+
 def get_top_down_frame(controller):
     # Setup the top-down camera
-    event = controller.step(action="GetMapViewCameraProperties", raise_for_failure=True)
+    event = controller.step(action="GetMapViewCameraProperties",
+                            raise_for_failure=True)
     pose = copy.deepcopy(event.metadata["actionReturn"])
 
     bounds = event.metadata["sceneBounds"]["size"]
@@ -36,7 +38,8 @@ def get_top_down_frame(controller):
     top_down_frame = event.third_party_camera_frames[-1]
 
     # Get a grid visualization of reachable positions
-    event = controller.step(action="GetReachablePositions", raise_for_failure=True)
+    event = controller.step(action="GetReachablePositions",
+                            raise_for_failure=True)
     reachable_positions = event.metadata["actionReturn"]
     xs = [rp["x"] for rp in reachable_positions]
     zs = [rp["z"] for rp in reachable_positions]
@@ -50,22 +53,19 @@ def get_top_down_frame(controller):
     # Convert the plot to an image
     fig.canvas.draw()
     top_down_grid = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    top_down_grid = top_down_grid.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    top_down_grid = top_down_grid.reshape(fig.canvas.get_width_height()[::-1] +
+                                          (3,))
     plt.close(fig)
 
     return Image.fromarray(top_down_frame), Image.fromarray(top_down_grid)
+
 
 def adjust_ai2thor_pose(pose):
     '''
     Adjust the camera pose from the one used in Unity to that in Open3D.
     '''
     # Transformation matrix to flip Y-axis
-    flip_y = np.array([
-        [1, 0, 0, 0],
-        [0, -1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1]
-    ])
+    flip_y = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 
     # Separate rotation and translation
     rotation = pose[:3, :3]
@@ -79,43 +79,43 @@ def adjust_ai2thor_pose(pose):
     adjusted_pose = np.eye(4)
     adjusted_pose[:3, :3] = adjusted_rotation
     adjusted_pose[:3, 3] = adjusted_translation
-    
+
     R = Rotation.from_euler('x', 180, degrees=True).as_matrix()
     R_homogeneous = np.eye(4)
     R_homogeneous[:3, :3] = R
-    
+
     T_open3d_rotated = R_homogeneous @ adjusted_pose
-    
+
     adjusted_pose = T_open3d_rotated
 
     return adjusted_pose
+
 
 def adjust_ai2thor_pose_batch(poses):
     '''
     Adjust the camera poses from the one used in Unity to that in Open3D.
     '''
     N = poses.shape[0]
-    
-    # Transformation matrix to flip Y-axis
-    flip_y = np.array([
-        [1, 0, 0, 0],
-        [0, -1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1]
-    ])
 
-    flip_y = np.repeat(flip_y[None, :, :], N, axis=0) # shape (N, 4, 4)
+    # Transformation matrix to flip Y-axis
+    flip_y = np.array([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
+
+    flip_y = np.repeat(flip_y[None, :, :], N, axis=0)  # shape (N, 4, 4)
 
     # Separate rotation and translation
-    rotation = poses[:, :3, :3] # shape (N, 3, 3)
-    translation = poses[:, :3, 3] # shape (N, 3)
+    rotation = poses[:, :3, :3]  # shape (N, 3, 3)
+    translation = poses[:, :3, 3]  # shape (N, 3)
 
     # Adjust rotation and translation separately
-    adjusted_rotation = np.einsum('nij,njk,nkl->nil', flip_y[:, :3, :3], rotation, flip_y[:, :3, :3]) # shape (N, 3, 3)
-    adjusted_translation = np.einsum('nij,nj->ni', flip_y[:, :3, :3], translation) # shape (N, 3)
+    adjusted_rotation = np.einsum('nij,njk,nkl->nil', flip_y[:, :3, :3],
+                                  rotation,
+                                  flip_y[:, :3, :3])  # shape (N, 3, 3)
+    adjusted_translation = np.einsum('nij,nj->ni', flip_y[:, :3, :3],
+                                     translation)  # shape (N, 3)
 
     # Reconstruct the adjusted camera pose
-    adjusted_pose = np.eye(4).reshape(1, 4, 4).repeat(N, axis=0) # shape (N, 4, 4)
+    adjusted_pose = np.eye(4).reshape(1, 4, 4).repeat(N,
+                                                      axis=0)  # shape (N, 4, 4)
     adjusted_pose[:, :3, :3] = adjusted_rotation
     adjusted_pose[:, :3, 3] = adjusted_translation
 
@@ -124,11 +124,14 @@ def adjust_ai2thor_pose_batch(poses):
     R_homogeneous = np.eye(4)
     R_homogeneous[:3, :3] = R
 
-    R_homogeneous = np.repeat(R_homogeneous[None, :, :], N, axis=0) # shape (N, 4, 4)
-    
-    adjusted_pose = np.einsum('nij,njk->nik', R_homogeneous, adjusted_pose) # shape (N, 4, 4)
+    R_homogeneous = np.repeat(R_homogeneous[None, :, :], N,
+                              axis=0)  # shape (N, 4, 4)
+
+    adjusted_pose = np.einsum('nij,njk->nik', R_homogeneous,
+                              adjusted_pose)  # shape (N, 4, 4)
 
     return adjusted_pose
+
 
 def adjust_ai2thor_batch_torch(poses):
     '''
@@ -141,27 +144,26 @@ def adjust_ai2thor_batch_torch(poses):
         adjusted_pose: torch.Tensor, shape (N, 4, 4)
     '''
     N = poses.shape[0]
-    
-    # Transformation matrix to flip Y-axis
-    flip_y = torch.tensor([
-        [1, 0, 0, 0],
-        [0, -1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 0, 0, 1]
-    ]).to(poses.device).type(poses.dtype)
 
-    flip_y = flip_y[None, :, :].expand(N, -1, -1) # shape (N, 4, 4)
+    # Transformation matrix to flip Y-axis
+    flip_y = torch.tensor([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, 1, 0],
+                           [0, 0, 0, 1]]).to(poses.device).type(poses.dtype)
+
+    flip_y = flip_y[None, :, :].expand(N, -1, -1)  # shape (N, 4, 4)
 
     # Separate rotation and translation
-    rotation = poses[:, :3, :3] # shape (N, 3, 3)
-    translation = poses[:, :3, 3] # shape (N, 3)
+    rotation = poses[:, :3, :3]  # shape (N, 3, 3)
+    translation = poses[:, :3, 3]  # shape (N, 3)
 
     # Adjust rotation and translation separately
-    adjusted_rotation = flip_y[:, :3, :3].bmm(rotation).bmm(flip_y[:, :3, :3]) # shape (N, 3, 3)
-    adjusted_translation = flip_y[:, :3, :3].bmm(translation.unsqueeze(-1)).squeeze(-1) # shape (N, 3)
+    adjusted_rotation = flip_y[:, :3, :3].bmm(rotation).bmm(
+        flip_y[:, :3, :3])  # shape (N, 3, 3)
+    adjusted_translation = flip_y[:, :3, :3].bmm(
+        translation.unsqueeze(-1)).squeeze(-1)  # shape (N, 3)
 
     # Reconstruct the adjusted camera pose
-    adjusted_pose = torch.eye(4).to(poses.device).type(poses.dtype).unsqueeze(0).expand(N, -1, -1) # shape (N, 4, 4)
+    adjusted_pose = torch.eye(4).to(poses.device).type(
+        poses.dtype).unsqueeze(0).expand(N, -1, -1)  # shape (N, 4, 4)
     adjusted_pose = adjusted_pose.clone()
     adjusted_pose[:, :3, :3] = adjusted_rotation
     adjusted_pose[:, :3, 3] = adjusted_translation
@@ -171,12 +173,15 @@ def adjust_ai2thor_batch_torch(poses):
     R_homogeneous = np.eye(4)
     R_homogeneous[:3, :3] = R
 
-    R_homogeneous = torch.from_numpy(R_homogeneous).type(poses.dtype).to(poses.device)
-    R_homogeneous = R_homogeneous[None, :, :].expand(N, -1, -1) # shape (N, 4, 4)
-    
-    adjusted_pose = R_homogeneous.bmm(adjusted_pose) # shape (N, 4, 4)
+    R_homogeneous = torch.from_numpy(R_homogeneous).type(poses.dtype).to(
+        poses.device)
+    R_homogeneous = R_homogeneous[None, :, :].expand(N, -1,
+                                                     -1)  # shape (N, 4, 4)
+
+    adjusted_pose = R_homogeneous.bmm(adjusted_pose)  # shape (N, 4, 4)
 
     return adjusted_pose
+
 
 def depth2xyz(depth: np.ndarray, K: np.ndarray) -> np.ndarray:
     '''
@@ -190,9 +195,9 @@ def depth2xyz(depth: np.ndarray, K: np.ndarray) -> np.ndarray:
         xyz_camera: 3D XYZ image in the camera coordinate frame, shape (H, W, 3)
     '''
     frame_size = depth.shape[:2]
-    
-    x = np.arange(0, frame_size[1]) 
-    y = np.arange(frame_size[0], 0, -1) 
+
+    x = np.arange(0, frame_size[1])
+    y = np.arange(frame_size[0], 0, -1)
     xx, yy = np.meshgrid(x, y)
 
     xx = xx.flatten()
@@ -206,9 +211,10 @@ def depth2xyz(depth: np.ndarray, K: np.ndarray) -> np.ndarray:
     y_camera = (yy - K[1, 2]) * zz / K[1, 1]
     z_camera = zz
     xyz_camera = np.stack([x_camera, y_camera, z_camera], axis=1)
-    
+
     xyz_camera = xyz_camera.reshape((*frame_size, 3))
     return xyz_camera
+
 
 def transform_xyz(xyz: np.ndarray, pose: np.ndarray) -> np.ndarray:
     '''
@@ -222,23 +228,23 @@ def transform_xyz(xyz: np.ndarray, pose: np.ndarray) -> np.ndarray:
         xyz_transformed: transformed 3D XYZ image, shape (H, W, 3)
     '''
     xyz_flatten = xyz.reshape(-1, 3)
-    xyz_transformed = pose @ np.concatenate([xyz_flatten, np.ones((xyz_flatten.shape[0], 1))], axis=1).T
+    xyz_transformed = pose @ np.concatenate(
+        [xyz_flatten, np.ones((xyz_flatten.shape[0], 1))], axis=1).T
     xyz_transformed = xyz_transformed.T[:, :3]
     xyz_transformed = xyz_transformed.reshape(xyz.shape)
     return xyz_transformed
+
 
 def get_scene(scene_name):
     # By default, use scene from AI2THOR
     # If the scene name starts with train, val, or test, use the scene from ProcTHOR
     scene = scene_name
-    if (
-        scene_name.startswith("train")
-        or scene_name.startswith("val")
-        or scene_name.startswith("test")
-    ):
+    if (scene_name.startswith("train") or scene_name.startswith("val") or
+            scene_name.startswith("test")):
         dataset = prior.load_dataset("procthor-10k")
         scene = dataset[scene_name.split("_")[0]][int(scene_name.split("_")[1])]
     return scene
+
 
 def compute_intrinsics(vfov, height, width):
     """
@@ -277,6 +283,7 @@ def compute_pose(position: dict, rotation: dict) -> np.ndarray:
 
     return T
 
+
 def compute_posrot(T: np.ndarray) -> Tuple[dict, dict]:
     """
     Decompose the camera extrinsics matrix into position and rotation.
@@ -296,9 +303,14 @@ def compute_posrot(T: np.ndarray) -> Tuple[dict, dict]:
 
     # Convert the position and rotation into dictionaries
     position = {"x": t[0], "y": t[1], "z": t[2]}
-    rotation = {"x": euler_angles[1], "y": euler_angles[2], "z": euler_angles[0]}
+    rotation = {
+        "x": euler_angles[1],
+        "y": euler_angles[2],
+        "z": euler_angles[0]
+    }
 
     return position, rotation
+
 
 def get_agent_pose_from_event(event) -> np.ndarray:
     '''
@@ -310,6 +322,7 @@ def get_agent_pose_from_event(event) -> np.ndarray:
     # Compute the agent pose (position and rotation of agent's body in global 3D space)
     agent_pose = compute_pose(position, rotation)
     return agent_pose
+
 
 def get_camera_pose_from_event(event) -> np.ndarray:
     '''
@@ -324,12 +337,12 @@ def get_camera_pose_from_event(event) -> np.ndarray:
 
 
 def sample_pose_random(controller: Controller, n_poses: int):
-    reachable_positions = controller.step(action="GetReachablePositions").metadata[
-        "actionReturn"
-    ]
+    reachable_positions = controller.step(
+        action="GetReachablePositions").metadata["actionReturn"]
 
     # Convert the positions to numpy array
-    reachable_np = np.array([[p["x"], p["y"], p["z"]] for p in reachable_positions])
+    reachable_np = np.array(
+        [[p["x"], p["y"], p["z"]] for p in reachable_positions])
     print(reachable_np)
 
     # Generate a list of poses for taking pictures
@@ -348,8 +361,7 @@ def sample_pose_random(controller: Controller, n_poses: int):
                 rotation=rotation,
                 horizon=0,
                 standing=True,
-            )
-        )
+            ))
 
     return sampled_poses
 
@@ -359,12 +371,12 @@ def sample_pose_uniform(controller: Controller, n_positions: int):
     Uniformly sample n_positions from the reachable positions
     for each position, uniformly sample 8 rotations (0, 45, 90, 135, 180, 225, 270, 315)
     """
-    reachable_positions = controller.step(action="GetReachablePositions").metadata[
-        "actionReturn"
-    ]
+    reachable_positions = controller.step(
+        action="GetReachablePositions").metadata["actionReturn"]
 
     # Convert the positions to numpy array
-    reachable_np = np.array([[p["x"], p["y"], p["z"]] for p in reachable_positions])
+    reachable_np = np.array(
+        [[p["x"], p["y"], p["z"]] for p in reachable_positions])
     # Sort the positions by x, z
     sort_idx = np.lexsort((reachable_np[:, 2], reachable_np[:, 0]))
     reachable_positions = [reachable_positions[i] for i in sort_idx]
@@ -375,9 +387,9 @@ def sample_pose_uniform(controller: Controller, n_positions: int):
     else:
         n_positions = min(n_positions, len(reachable_positions))
 
-    sampled_positions = np.random.choice(
-        reachable_positions, n_positions, replace=False
-    )
+    sampled_positions = np.random.choice(reachable_positions,
+                                         n_positions,
+                                         replace=False)
 
     # Generate a list of poses for taking pictures
     sampled_poses = []
@@ -391,7 +403,6 @@ def sample_pose_uniform(controller: Controller, n_positions: int):
                     rotation=rotation,
                     horizon=0,
                     standing=True,
-                )
-            )
+                ))
 
     return sampled_poses
