@@ -131,9 +131,9 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         self.desired_height = desired_height
         self.desired_width = desired_width
         self.height_downsample_ratio = float(
-            self.desired_height) / self.orig_height
+            self.desired_height) / self.orig_height  # 680 / 480
         self.width_downsample_ratio = float(
-            self.desired_width) / self.orig_width
+            self.desired_width) / self.orig_width  # 1200 / 640
         self.channels_first = channels_first
         self.normalize_color = normalize_color
 
@@ -208,8 +208,9 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         raise NotImplementedError
 
     def _preprocess_color(self, color: np.ndarray):
-        r"""Preprocesses the color image by resizing to :math:`(H, W, C)`, (optionally) normalizing values to
-        :math:`[0, 1]`, and (optionally) using channels first :math:`(C, H, W)` representation.
+        """Preprocesses the color image by resizing to :math:`(H, W, C)`,
+        (optionally) normalizing values to :math:`[0, 1]`, and
+        (optionally) using channels first :math:`(C, H, W)` representation.
 
         Args:
             color (np.ndarray): Raw input rgb image
@@ -219,7 +220,8 @@ class GradSLAMDataset(torch.utils.data.Dataset):
 
         Shape:
             - Input: :math:`(H_\text{old}, W_\text{old}, C)`
-            - Output: :math:`(H, W, C)` if `self.channels_first == False`, else :math:`(C, H, W)`.
+            - Output: :math:`(H, W, C)` if `self.channels_first == False`,
+                else :math:`(C, H, W)`.
         """
         color = cv2.resize(
             color,
@@ -233,8 +235,13 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         return color
 
     def _preprocess_depth(self, depth: np.ndarray):
-        r"""Preprocesses the depth image by resizing, adding channel dimension, and scaling values to meters. Optionally
-        converts depth from channels last :math:`(H, W, 1)` to channels first :math:`(1, H, W)` representation.
+        """ Preprocesses the depth image by resizing,
+        adding channel dimension, and
+        scaling values to meters.
+        Optionally
+            converts depth from channels last :
+                math:`(H, W, 1)` to
+                channels first :math:`(1, H, W)` representation.
 
         Args:
             depth (np.ndarray): Raw depth image
@@ -244,7 +251,8 @@ class GradSLAMDataset(torch.utils.data.Dataset):
 
         Shape:
             - depth: :math:`(H_\text{old}, W_\text{old})`
-            - Output: :math:`(H, W, 1)` if `self.channels_first == False`, else :math:`(1, H, W)`.
+            - Output: :math:`(H, W, 1)` if `self.channels_first == False`,
+                        else :math:`(1, H, W)`.
         """
         depth = cv2.resize(
             depth.astype(float),
@@ -254,7 +262,7 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         depth = np.expand_dims(depth, -1)
         if self.channels_first:
             depth = datautils.channels_first(depth)
-        return depth / self.png_depth_scale
+        return depth / self.png_depth_scale  # to meter
 
     def _preprocess_poses(self, poses: torch.Tensor):
         r"""Preprocesses the poses by setting first pose in a sequence to identity and computing the relative
@@ -279,7 +287,7 @@ class GradSLAMDataset(torch.utils.data.Dataset):
     def get_cam_K(self):
         '''
         Return camera intrinsics matrix K
-        
+
         Returns:
             K (torch.Tensor): Camera intrinsics matrix, of shape (3, 3)
         '''
@@ -294,9 +302,23 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         raise NotImplementedError
 
     def __getitem__(self, index):
+        """
+
+        Args:
+            index:
+
+        Returns:
+            color
+            depth
+            intrinsics
+            pose
+            embedding: (optional) embedding for the frame.
+
+        """
         color_path = self.color_paths[index]
         depth_path = self.depth_paths[index]
         color = np.asarray(imageio.imread(color_path), dtype=float)
+        # resize, normalize, channels first
         color = self._preprocess_color(color)
         color = torch.from_numpy(color)
         if ".png" in depth_path:
@@ -313,7 +335,9 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         K = torch.from_numpy(K)
         if self.distortion is not None:
             # undistortion is only applied on color image, not depth!
-            color = cv2.undistort(color, K, self.distortion)
+            color = cv2.undistort(color,
+                                  cameraMatrix=K,
+                                  distCoeffs=self.distortion)
 
         depth = self._preprocess_depth(depth)
         depth = torch.from_numpy(depth)
@@ -449,7 +473,9 @@ class ReplicaDataset(GradSLAMDataset):
         embedding_dim: Optional[int] = 512,
         **kwargs,
     ):
+        # self.input_folder: /path/to/Replica/room0
         self.input_folder = os.path.join(basedir, sequence)
+        # self.pose_path: /path/to/Replica/room0/traj.txt
         self.pose_path = os.path.join(self.input_folder, "traj.txt")
         super().__init__(
             config_dict,
@@ -465,6 +491,14 @@ class ReplicaDataset(GradSLAMDataset):
         )
 
     def get_filepaths(self):
+        """
+self.color_paths, self.depth_paths, self.embedding_paths = self.get_filepaths()
+
+# self.input_folder: /path/to/Replica/room0
+self.embedding_dir:
+    if load_embeddings is True, self.embedding_dir = "embed_semseg"
+    else, self.embedding_dir = "embeddings"
+        """
         color_paths = natsorted(
             glob.glob(f"{self.input_folder}/results/frame*.jpg"))
         depth_paths = natsorted(
@@ -477,6 +511,7 @@ class ReplicaDataset(GradSLAMDataset):
 
     def load_poses(self):
         poses = []
+        # self.pose_path: /path/to/Replica/room0/traj.txt
         with open(self.pose_path, "r") as f:
             lines = f.readlines()
         for i in range(self.num_imgs):
@@ -1079,7 +1114,8 @@ def load_dataset_config(path, default_path=None):
 
     Args:
         path (str): path to config file.
-        default_path (str, optional): whether to use default path. Defaults to None.
+        default_path (str, optional):
+            whether to use default path. Defaults to None.
 
     Returns:
         cfg (dict): config dict.
@@ -1160,7 +1196,25 @@ def common_dataset_to_batch(dataset):
 
 @measure_time
 def get_dataset(dataconfig, basedir, sequence, **kwargs):
+    """
+
+    Args:
+        dataconfig: $REPLICA_CONFIG_PATH
+                        ${CG_FOLDER}/conceptgraph/dataset/
+                        dataconfigs/replica/replica.yaml
+        basedir: $REPLICA_ROOT
+                    /path/to/Replica
+        sequence: $SCENE_NAME
+                    room0
+        **kwargs:
+
+    Returns:
+
+    """
     config_dict = load_dataset_config(dataconfig)
+    """
+    dataset_name: replica
+    """
     if config_dict["dataset_name"].lower() in ["icl"]:
         return ICLDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["replica"]:

@@ -53,6 +53,25 @@ def get_parser() -> argparse.ArgumentParser:
 
 
 def main(args: argparse.Namespace):
+    """
+
+export REPLICA_ROOT= ~/PycharmProjects/concept-graphs/Datasets/Replica
+
+export CG_FOLDER=/path/to/concept-graphs/
+export REPLICA_CONFIG_PATH=${CG_FOLDER}/conceptgraph/dataset/
+    dataconfigs/replica/replica.yaml
+
+
+SCENE_NAME=room0
+python scripts/run_slam_rgb.py \
+    --dataset_root $REPLICA_ROOT \
+    --dataset_config $REPLICA_CONFIG_PATH \
+    --scene_id $SCENE_NAME \
+    --image_height 480 \
+    --image_width 640 \
+    --stride 5 \
+    --visualize
+    """
     if args.load_semseg:
         load_embeddings = True
         embedding_dir = "embed_semseg"
@@ -65,7 +84,17 @@ def main(args: argparse.Namespace):
         load_embeddings = False
         embedding_dir = "embeddings"
         embedding_dim = 512
-
+    """
+        dataconfig: $REPLICA_CONFIG_PATH
+                        ${CG_FOLDER}/conceptgraph/dataset/
+                        dataconfigs/replica/replica.yaml
+        basedir: $REPLICA_ROOT
+                    /path/to/Replica
+        sequence: $SCENE_NAME
+                    room0
+        **kwargs:
+    """
+    # dataset: ReplicaDataset
     dataset = get_dataset(
         dataconfig=args.dataset_config,
         basedir=args.dataset_root,
@@ -93,6 +122,11 @@ def main(args: argparse.Namespace):
             _confidence = torch.ones_like(_embedding)
         else:
             _color, _depth, intrinsics, _pose = dataset[idx]
+            print("_color.shape", _color.shape)
+            print("_depth.shape", _depth.shape)
+            print("intrinsics.shape", intrinsics.shape)
+            print("_pose.shape", _pose.shape)
+            raise NotImplementedError
             _embedding = None
             _confidence = None
 
@@ -112,7 +146,9 @@ def main(args: argparse.Namespace):
         pointclouds, _ = slam.step(pointclouds, frame_cur, frame_prev)
         # frame_prev = frame_cur # Keep it None when we use the gt odom
         torch.cuda.empty_cache()
-
+    # dataset_root =  $REPLICA_ROOT = /path/to/Replica
+    # scene_id  = $SCENE_NAME = room0
+    # dir_to_save_map = /path/to/Replica/room0/rgb_cloud
     dir_to_save_map = os.path.join(args.dataset_root, args.scene_id,
                                    "rgb_cloud")
     print(f"Saving the map to {dir_to_save_map}")
@@ -120,8 +156,9 @@ def main(args: argparse.Namespace):
     pointclouds.save_to_h5(dir_to_save_map)
 
     # Set the filename for the PCD file
+    # pcd_file_path = /path/to/Replica/room0/rgb_cloud/pointcloud.pcd
     pcd_file_path = os.path.join(dir_to_save_map, "pointcloud.pcd")
-    pcd = pointclouds.open3d(0)
+    pcd = pointclouds.open3d(index=0)
 
     if args.save_pcd:
         o3d.io.write_point_cloud(pcd_file_path, pcd)  # Saving as PCD
