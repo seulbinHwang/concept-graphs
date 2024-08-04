@@ -12,7 +12,7 @@ import glob
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 
 import cv2
 import imageio
@@ -308,12 +308,11 @@ class GradSLAMDataset(torch.utils.data.Dataset):
             index:
 
         Returns:
-            color
-            depth
-            intrinsics
-            pose
+            color: (480, 640, 3)
+            depth: (480, 640, 1)
+            intrinsics: (4, 4)
+            pose: (4, 4)
             embedding: (optional) embedding for the frame.
-
         """
         color_path = self.color_paths[index]
         depth_path = self.depth_paths[index]
@@ -490,7 +489,7 @@ class ReplicaDataset(GradSLAMDataset):
             **kwargs,
         )
 
-    def get_filepaths(self):
+    def get_filepaths(self) -> Tuple[List[str], List[str], Optional[List[str]]]:
         """
 self.color_paths, self.depth_paths, self.embedding_paths = self.get_filepaths()
 
@@ -505,11 +504,12 @@ self.embedding_dir:
             glob.glob(f"{self.input_folder}/results/depth*.png"))
         embedding_paths = None
         if self.load_embeddings:
+            # ~/Datastes/Replica/room0/embed_semseg
             embedding_paths = natsorted(
                 glob.glob(f"{self.input_folder}/{self.embedding_dir}/*.pt"))
         return color_paths, depth_paths, embedding_paths
 
-    def load_poses(self):
+    def load_poses(self) -> List[torch.Tensor]:
         poses = []
         # self.pose_path: /path/to/Replica/room0/traj.txt
         with open(self.pose_path, "r") as f:
@@ -519,7 +519,7 @@ self.embedding_dir:
             c2w = np.array(list(map(float, line.split()))).reshape(4, 4)
             # c2w[:3, 1] *= -1
             # c2w[:3, 2] *= -1
-            c2w = torch.from_numpy(c2w).float()
+            c2w = torch.from_numpy(c2w).float() # (4, 4)
             poses.append(c2w)
         return poses
 

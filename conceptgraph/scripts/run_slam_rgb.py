@@ -15,7 +15,6 @@ from gradslam.slam.pointfusion import PointFusion
 from gradslam.structures.pointclouds import Pointclouds
 from gradslam.structures.rgbdimages import RGBDImages
 
-
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -71,10 +70,19 @@ python scripts/run_slam_rgb.py \
     --image_width 640 \
     --stride 5 \
     --visualize
+
+dataset_root : $REPLICA_ROOT
+    ~/PycharmProjects/concept-graphs/Datasets/Replica
+dataset_config : $REPLICA_CONFIG_PATH
+    ${CG_FOLDER}/conceptgraph/dataset/dataconfigs/replica/replica.yaml
+CG_FOLDER : ~/PycharmProjects/concept-graphs
+scene_id : $SCENE_NAME
+    room0
     """
     if args.load_semseg:
         load_embeddings = True
         embedding_dir = "embed_semseg"
+        # dataset_root: $REPLICA_ROOT = /path/to/Replica
         semseg_classes = json.load(
             open(
                 args.dataset_root / args.scene_id / "embed_semseg_classes.json",
@@ -115,6 +123,9 @@ python scripts/run_slam_rgb.py \
     frame_cur, frame_prev = None, None
     pointclouds = Pointclouds(device=args.device)
 
+    """
+    len(dataset): RGB images path에 저장된 장수 (stride로 설정한 값만큼)
+    """
     for idx in trange(len(dataset)):
         if load_embeddings:
             _color, _depth, intrinsics, _pose, _embedding = dataset[idx]
@@ -122,11 +133,12 @@ python scripts/run_slam_rgb.py \
             _confidence = torch.ones_like(_embedding)
         else:
             _color, _depth, intrinsics, _pose = dataset[idx]
-            print("_color.shape", _color.shape)
-            print("_depth.shape", _depth.shape)
-            print("intrinsics.shape", intrinsics.shape)
-            print("_pose.shape", _pose.shape)
-            raise NotImplementedError
+            """
+            _color: (480, 640, 3)
+            _depth: (480, 640, 1)
+            intrinsics: (4, 4)
+            _pose: (4, 4)
+            """
             _embedding = None
             _confidence = None
 
@@ -135,12 +147,12 @@ python scripts/run_slam_rgb.py \
         _pose = torch.from_numpy(pose_np).to(_pose.device).to(_pose.dtype)
 
         frame_cur = RGBDImages(
-            _color.unsqueeze(0).unsqueeze(0),
-            _depth.unsqueeze(0).unsqueeze(0),
-            intrinsics.unsqueeze(0).unsqueeze(0),
-            _pose.unsqueeze(0).unsqueeze(0),
-            embeddings=_embedding,
-            confidence_image=_confidence,
+            _color.unsqueeze(0).unsqueeze(0), # (1, 1, 480, 640, 3)
+            _depth.unsqueeze(0).unsqueeze(0), # (1, 1, 480, 640, 1)
+            intrinsics.unsqueeze(0).unsqueeze(0), # (1, 1, 4, 4)
+            _pose.unsqueeze(0).unsqueeze(0), # (1, 1, 4, 4)
+            embeddings=_embedding, # None
+            confidence_image=_confidence, # None
         )
 
         pointclouds, _ = slam.step(pointclouds, frame_cur, frame_prev)
@@ -159,9 +171,11 @@ python scripts/run_slam_rgb.py \
     # pcd_file_path = /path/to/Replica/room0/rgb_cloud/pointcloud.pcd
     pcd_file_path = os.path.join(dir_to_save_map, "pointcloud.pcd")
     pcd = pointclouds.open3d(index=0)
+    print("success to get open3d pointcloud from pointclouds.")
 
     if args.save_pcd:
         o3d.io.write_point_cloud(pcd_file_path, pcd)  # Saving as PCD
+        print(f"Saved pointcloud to {pcd_file_path}")
 
     if args.visualize:
         o3d.visualization.draw_geometries([pcd])

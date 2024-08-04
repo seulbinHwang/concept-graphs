@@ -1,27 +1,27 @@
 dataset_name: 'replica'
-meshing:
-  eval_rec: True
-tracking:
-  vis_freq: 50
-  vis_inside_freq: 25
-  ignore_edge_W: 100
-  ignore_edge_H: 100
-  seperate_LR: False
-  const_speed_assumption: True
+meshing: # 3D 포인트 클라우드를 연결하여 연속적인 표면(mesh)을 생성하는 과정
+  eval_rec: True # 재구성된 메쉬 결과를 평가
+tracking: #  카메라 위치와 자세(orientation)를 지속적으로 추적
+  vis_freq: 50 #  매 50 프레임마다 시각화
+  vis_inside_freq: 25 #  매 25 프레임마다 내부 시각화를 수행
+  ignore_edge_W: 100 # 추적 중, 이미지의 너비에서 무시할 가장자리의 픽셀 수를 지정
+  ignore_edge_H: 100 # 추적 중, 이미지의 높이에서 무시할 가장자리의 픽셀 수를 지정
+  seperate_LR: False # 좌우를 구분할지 여부를 지정
+  const_speed_assumption: True # 일정한 속도를 가정할지 여부를 지정
   lr: 0.001
-  pixels: 200
-  iters: 10
+  pixels: 200 # 추적 알고리즘이 사용할 픽셀 수
+  iters: 10 # 최적화 반복 횟수를 지정
 mapping:
-  every_frame: 5
-  vis_freq: 50
-  vis_inside_freq: 30
-  mesh_freq: 50
-  ckpt_freq: 500
-  keyframe_every: 50
-  mapping_window_size: 5
-  pixels: 1000
-  iters_first: 1500
-  iters: 60
+  every_frame: 5 # 5로 설정하면 매 5번째 프레임마다 매핑을 수행
+  vis_freq: 50 # 매핑 과정 중 시각화를 수행할 빈도 (프레임 단위)
+  vis_inside_freq: 30 # 내부 시각화를 수행할 빈도 (프레임 단위)
+  mesh_freq: 50 # 메쉬를 생성할 빈도 (프레임 단위)
+  ckpt_freq: 500 # 체크포인트를 저장할 빈도 (프레임 단위)
+  keyframe_every: 50 # 키 프레임을 생성할 빈도 (프레임 단위)
+  mapping_window_size: 5 # 매핑 윈도우 크기
+  pixels: 1000 # 매핑에 사용할 픽셀 수
+  iters_first: 1500 # 첫 번째 매핑에 사용할 반복 횟수
+  iters: 60 # 매핑에 사용할 반복 횟수
 camera_params:
   image_height: 680
   image_width: 1200
