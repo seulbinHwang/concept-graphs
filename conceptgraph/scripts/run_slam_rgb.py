@@ -15,6 +15,7 @@ from gradslam.slam.pointfusion import PointFusion
 from gradslam.structures.pointclouds import Pointclouds
 from gradslam.structures.rgbdimages import RGBDImages
 
+
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -122,7 +123,6 @@ scene_id : $SCENE_NAME
 
     frame_cur, frame_prev = None, None
     pointclouds = Pointclouds(device=args.device)
-
     """
     len(dataset): RGB images path에 저장된 장수 (stride로 설정한 값만큼)
     """
@@ -147,12 +147,12 @@ scene_id : $SCENE_NAME
         _pose = torch.from_numpy(pose_np).to(_pose.device).to(_pose.dtype)
 
         frame_cur = RGBDImages(
-            _color.unsqueeze(0).unsqueeze(0), # (1, 1, 480, 640, 3)
-            _depth.unsqueeze(0).unsqueeze(0), # (1, 1, 480, 640, 1)
-            intrinsics.unsqueeze(0).unsqueeze(0), # (1, 1, 4, 4)
-            _pose.unsqueeze(0).unsqueeze(0), # (1, 1, 4, 4)
-            embeddings=_embedding, # None
-            confidence_image=_confidence, # None
+            _color.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 3)
+            _depth.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 1)
+            intrinsics.unsqueeze(0).unsqueeze(0),  # (1, 1, 4, 4)
+            _pose.unsqueeze(0).unsqueeze(0),  # (1, 1, 4, 4)
+            embeddings=_embedding,  # None
+            confidence_image=_confidence,  # None
         )
 
         pointclouds, _ = slam.step(pointclouds, frame_cur, frame_prev)

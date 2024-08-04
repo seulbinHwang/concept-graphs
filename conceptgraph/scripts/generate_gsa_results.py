@@ -351,6 +351,21 @@ def process_ai2thor_classes(classes: List[str],
 
 def main(args: argparse.Namespace):
     ### Initialize the Grounding DINO model ###
+    """
+python scripts/generate_gsa_results.py \
+    --dataset_root $REPLICA_ROOT \
+    --dataset_config $REPLICA_CONFIG_PATH \
+    --scene_id $SCENE_NAME \
+    --class_set none \
+    --stride 5
+    """
+    """
+        dataconfig: $REPLICA_CONFIG_PATH
+                        ${CG_FOLDER}/conceptgraph/dataset/
+                        dataconfigs/replica/replica.yaml
+        scene_id: $SCENE_NAME
+                    room0
+    """
     grounding_dino_model = Model(
         model_config_path=GROUNDING_DINO_CONFIG_PATH,
         model_checkpoint_path=GROUNDING_DINO_CHECKPOINT_PATH,
@@ -468,9 +483,11 @@ def main(args: argparse.Namespace):
 
         color_path = Path(color_path)
 
-        vis_save_path = args.dataset_root / args.scene_id / f"gsa_vis_{save_name}" / color_path.name
-        detections_save_path = args.dataset_root / args.scene_id / f"gsa_detections_{save_name}" / color_path.name
-        detections_save_path = detections_save_path.with_suffix(".pkl.gz")
+        vis_save_path = (args.dataset_root / args.scene_id /
+                         f"gsa_vis_{save_name}" / color_path.name)
+        detections_save_path = (args.dataset_root / args.scene_id /
+                                f"gsa_detections_{save_name}" / color_path.name)
+        detections_save_path = (detections_save_path.with_suffix(".pkl.gz"))
 
         os.makedirs(os.path.dirname(vis_save_path), exist_ok=True)
         os.makedirs(os.path.dirname(detections_save_path), exist_ok=True)
