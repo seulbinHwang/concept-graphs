@@ -1,6 +1,7 @@
 class GPTPrompt:
+
     def __init__(self):
-        
+
         self.old_system_prompt = """
         The input is a list of JSONs describing multiple predictions of a single object. Each JSON has four fields: 
         1. id: a unique identifier for the object
@@ -24,11 +25,11 @@ class GPTPrompt:
         the fields "summary", "possible_tags", and "object_tag". The object_tag must be supported by the captions.
         It is very important that the output must be valid JSON, and nothing else.
         """
-        
+
         self.new_but_long_system_prompt = """You are a helpful assistant that helps identify and describe objects in a scene. Your input is a in JSON format, and you should always reply in JSON format. Your input will contain the field "caption" which is a list of captions of an image attempting to identify the objects in the image. Your response should contain the fields "summary" containing a concise summary of the object(s) in the image. If an object is mentioned more than once, that prediction is likely accurate. If many objects are mentioned more than once, and a container or surface is mentioned, it is likely that the image was of those objects (mentioned more than once) on that container or surface. If no object is mentioned more than once, and each caption is unrelated to the rest, it could be a blank or too small image or blurry image, the captions are likely incorrect, so just say "conflicting captions about [objects] in the summary field and put "invalid" in the "object_tag" field. The field "possible_tags" should contain a list of possible tags that you think the object(s) could be. The field "object_tag" should contain the final tag that you think this object should be, considering all the information given. These are based on scans of indoor scenes so most objects will be those found in indoor spaces. """
-        
+
         self.system_prompt = """Identify and describe objects in scenes. Input and output must be in JSON format. The input field 'captions' contains a list of image captions aiming to identify objects. Output 'summary' as a concise description of the identified object(s). An object mentioned multiple times is likely accurate. If various objects are repeated and a container/surface is noted such as a shelf or table, assume the (repeated) objects are on that container/surface. For unrelated, non-repeating (or empty) captions, summarize as 'conflicting (or empty) captions about [objects]' and set 'object_tag' to 'invalid'. Output 'possible_tags' listing potential object categories. Set 'object_tag' as the conclusive identification. Focus on indoor object types, as the input captions are from indoor scans."""
-        
+
         self.example_1 = """
         "id": 1,
         "captions": [
@@ -48,13 +49,13 @@ class GPTPrompt:
         ]
         }"
         """
-        
+
         self.response_1 = """{
         "summary": "a jacket hanging on a rack",
         "possible_tags": ["jacket", "sweater", "hooded jacket", "hooded sweatshirt", "coat", "hanging clothing", "hanger", "wall", "rack"],
         "object_tag": "hanging jacket"
         }"""
-        
+
         self.example_2 = """{
         "id": 12,
         "captions": [
@@ -62,13 +63,13 @@ class GPTPrompt:
         "a bicycle helmet"
         ]
         }"""
-        
+
         self.response_2 = """{
         "summary": "conflicting captions of a bookshelf and a bicycle helmet",
         "possible_tags": ["bookshelf", "bicycle helmet", "helmet", "bookcase", "book", "books", "shelf", "shelves"],
         "object_tag": "invalid"
         }"""
-        
+
         self.example_3 = """{
         "id": 304,
         "captions": [
@@ -78,13 +79,13 @@ class GPTPrompt:
         "a white shelf or bookshelf that is filled with various items."
         ]
         }"""
-        
+
         self.response_3 = """{
         "summary": "a white shelf or rack filled with various items",
         "possible_tags": ["shelf", "rack", "bookshelf", "bookcase", "box", "file", "scissors", "sewing machine"],
         "object_tag": "shelf"
         }"""
-        
+
         self.example_4 = """{
         "id": 433,
         "captions": [
@@ -103,13 +104,13 @@ class GPTPrompt:
         "a gray shirt with the NASA logo on it."
         ]
         }"""
-        
+
         self.response_4 = """{
         "summary": "a white table containing a barbell and possibly with some other exercise equipment",
         "possible_tags": ["exercise equipment", "tennis ball", "barbell", "bench", "table", "microwave", "bottle", "vase", "pitcher", "shirt"],
         "object_tag": "white table"
         }"""
-        
+
         self.example_5 = """{
         "id": 231,
         "captions": [
@@ -119,62 +120,50 @@ class GPTPrompt:
             "a laptop computer."
         ]
         }"""
-        
+
         self.response_5 = """{
         "summary": "conflicting captions of a teddy bear, a doorknob, a television set, and a laptop computer",
         "possible_tags": ["teddy bear", "doorknob", "television set", "laptop computer", "computer"],
         "object_tag": "invalid"
         }"""
 
-
     def get_json(self):
-        prompt_json = [
-            {
-                "role": "system",
-                "content": self.system_prompt
-            },
-            {
-                "role": "user",
-                "content": self.example_1
-            },
-            {
-                "role": "assistant",
-                "content": self.response_1
-            },
-            {
-                "role": "user",
-                "content": self.example_2
-            },
-            {
-                "role": "assistant",
-                "content": self.response_2
-            },
-            {
-                "role": "user",
-                "content": self.example_3
-            },
-            {
-                "role": "assistant",
-                "content": self.response_3
-            },
-            {
-                "role": "user",
-                "content": self.example_4
-            },
-            {
-                "role": "assistant",
-                "content": self.response_4
-            },
-            {
-                "role": "user",
-                "content": self.example_5
-            },
-            {
-                "role": "assistant",
-                "content": self.response_5
-            }
-        ]
+        prompt_json = [{
+            "role": "system",
+            "content": self.system_prompt
+        }, {
+            "role": "user",
+            "content": self.example_1
+        }, {
+            "role": "assistant",
+            "content": self.response_1
+        }, {
+            "role": "user",
+            "content": self.example_2
+        }, {
+            "role": "assistant",
+            "content": self.response_2
+        }, {
+            "role": "user",
+            "content": self.example_3
+        }, {
+            "role": "assistant",
+            "content": self.response_3
+        }, {
+            "role": "user",
+            "content": self.example_4
+        }, {
+            "role": "assistant",
+            "content": self.response_4
+        }, {
+            "role": "user",
+            "content": self.example_5
+        }, {
+            "role": "assistant",
+            "content": self.response_5
+        }]
         return prompt_json
+
 
 # Usage example
 if __name__ == "__main__":

@@ -1,4 +1,3 @@
-
 # WORKS, LAVA 1.5 13B, 4 BIT PRESCSION
 import requests
 from PIL import Image
@@ -8,15 +7,12 @@ from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 model_id = "llava-hf/llava-1.5-13b-hf"
 
-
 # image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-model = LlavaForConditionalGeneration.from_pretrained(
-    model_id, 
-    torch_dtype=torch.float16, 
-    low_cpu_mem_usage=True, 
-    load_in_8bit=True
-)
+model = LlavaForConditionalGeneration.from_pretrained(model_id,
+                                                      torch_dtype=torch.float16,
+                                                      low_cpu_mem_usage=True,
+                                                      load_in_8bit=True)
 
 processor = AutoProcessor.from_pretrained(model_id)
 
@@ -25,7 +21,10 @@ processor = AutoProcessor.from_pretrained(model_id)
 img_path = '/home/kuwajerw/new_local_data/new_record3d/ali_apartment/apt_scan_no_smooth_processed/exps/s_detections_stride1_69/vis/160_for_vlm.jpg'
 raw_image = Image.open(img_path).convert('RGB')
 
-labels = ['power outlet 1', 'backpack 2', 'computer tower 3', 'poster 4', 'desk 5', 'picture 6', 'bowl 7', 'folded chair 8', 'trash bin 9', 'tissue box 10']
+labels = [
+    'power outlet 1', 'backpack 2', 'computer tower 3', 'poster 4', 'desk 5',
+    'picture 6', 'bowl 7', 'folded chair 8', 'trash bin 9', 'tissue box 10'
+]
 
 example_labels = []
 
@@ -39,5 +38,4 @@ inputs = processor(prompt, raw_image, return_tensors='pt')
 
 output = model.generate(**inputs, max_new_tokens=200, do_sample=False)
 print(processor.decode(output[0][2:], skip_special_tokens=True))
-k=1
- 
+k = 1

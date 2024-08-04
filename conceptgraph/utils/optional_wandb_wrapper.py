@@ -1,5 +1,6 @@
 import logging
 
+
 class OptionalWandB:
     '''
     A class for optionally integrating Weights & Biases (wandb) into your projects. It's designed to 
@@ -70,9 +71,9 @@ class OptionalWandB:
         _config_use_wandb (bool): Determines if wandb is to be used, based on user configuration.
         _wandb (module): Reference to the wandb module if it's installed and enabled.
     '''
-    
+
     _instance = None
-    
+
     def __new__(cls):
         '''
         Ensures that only one instance of the OptionalWandB class is created. 
@@ -106,9 +107,12 @@ class OptionalWandB:
                 self._wandb = wandb
                 logging.info("wandb is installed. Using wandb for logging.")
             except ImportError:
-                logging.info("wandb is not installed. Not using wandb for logging.")
+                logging.info(
+                    "wandb is not installed. Not using wandb for logging.")
         else:
-            logging.info("wandb functionality is disabled in the config. Not using wandb for logging.")
+            logging.info(
+                "wandb functionality is disabled in the config. Not using wandb for logging."
+            )
 
     def __getattr__(self, name):
         '''
@@ -124,6 +128,7 @@ class OptionalWandB:
             A method that either calls the corresponding wandb method or logs a message, depending on 
             the wandb usage configuration and installation status.
         '''
+
         def method(*args, **kwargs):
             if self._config_use_wandb and self._wandb:
                 # if self._initialized:
@@ -136,7 +141,12 @@ class OptionalWandB:
                 #     logging.info(f"Skipping optional wandb call to '{name}' because wandb is not initialized.")
             else:
                 if not self._config_use_wandb:
-                    logging.debug(f"Skipping optional wandb call to '{name}' because wandb usage is disabled.")
+                    logging.debug(
+                        f"Skipping optional wandb call to '{name}' because wandb usage is disabled."
+                    )
                 elif self._wandb is None:
-                    logging.debug(f"Skipping optional wandb call to '{name}' because wandb is not installed.")
+                    logging.debug(
+                        f"Skipping optional wandb call to '{name}' because wandb is not installed."
+                    )
+
         return method

@@ -38,7 +38,6 @@ I'm just removing the gradslam dependency to make conceptgraphs easier to instal
 # ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 """
 Util functions used in structures. `list_to_padded` and `padded_to_list` functions are borrowed from pytorch3d:
 https://github.com/facebookresearch/pytorch3d
@@ -81,22 +80,25 @@ def list_to_padded(
         pad_dim1 = max(y.shape[1] for y in x if len(y) > 0)
     else:
         if len(pad_size) != 2:
-            raise ValueError("Pad size must contain target size for 1st and 2nd dim")
+            raise ValueError(
+                "Pad size must contain target size for 1st and 2nd dim")
         pad_dim0, pad_dim1 = pad_size
 
     N = len(x)
-    x_padded = torch.full(
-        (N, pad_dim0, pad_dim1), pad_value, dtype=x[0].dtype, device=x[0].device
-    )
+    x_padded = torch.full((N, pad_dim0, pad_dim1),
+                          pad_value,
+                          dtype=x[0].dtype,
+                          device=x[0].device)
     for i, y in enumerate(x):
         if len(y) > 0:
             if y.ndim != 2:
                 raise ValueError("Supports only 2-dimensional tensor items")
-            x_padded[i, : y.shape[0], : y.shape[1]] = y
+            x_padded[i, :y.shape[0], :y.shape[1]] = y
     return x_padded
 
 
-def padded_to_list(x: torch.Tensor, split_size: Union[list, tuple, None] = None):
+def padded_to_list(x: torch.Tensor,
+                   split_size: Union[list, tuple, None] = None):
     r"""Transforms a padded tensor of shape :math:`(B, N, C)` into a list of :math:`B` tensors of shape
     :math:`(N_b, C_b)` where :math:`(N_b, C_b)` is specified in split_size(b), or of shape :math:`(N, C)` if
     split_size is None. split_size support only for 3-dimensional input tensor.
@@ -119,22 +121,25 @@ def padded_to_list(x: torch.Tensor, split_size: Union[list, tuple, None] = None)
 
     N = len(split_size)
     if x.shape[0] != N:
-        raise ValueError("Split size must be of same length as inputs first dimension")
+        raise ValueError(
+            "Split size must be of same length as inputs first dimension")
 
     for i in range(N):
         if isinstance(split_size[i], int):
-            x_list[i] = x_list[i][: split_size[i]]
+            x_list[i] = x_list[i][:split_size[i]]
         elif len(split_size[i]) == 2:
-            x_list[i] = x_list[i][: split_size[i][0], : split_size[i][1]]
+            x_list[i] = x_list[i][:split_size[i][0], :split_size[i][1]]
         else:
-            raise ValueError(
-                "Support only for 2-dimensional unbinded tensor. \
-                    Split size for more dimensions provided"
-            )
+            raise ValueError("Support only for 2-dimensional unbinded tensor. \
+                    Split size for more dimensions provided")
     return x_list
 
 
-def numpy_to_plotly_image(img, name=None, is_depth=False, scale=None, quality=95):
+def numpy_to_plotly_image(img,
+                          name=None,
+                          is_depth=False,
+                          scale=None,
+                          quality=95):
     r"""Converts a numpy array img to a `plotly.graph_objects.Image` object.
 
     Args

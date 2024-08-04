@@ -24,7 +24,6 @@ Your response should be a description of the spatial relationships between the o
 An example to illustrate the response format:
 [("book 4", "on top of", "table 2"), ("cup 3", "next to", "book 4"), ("lamp 8", "on top of", "music stand 6")]
 '''
-
 '''
 You are an agent specialized in identifying and describing objects that are placed "on top of" each other in an annotated image. You always output a list of tuples that describe the "on top of" spatial relationships between the objects, and nothing else. When in doubt, output an empty list.
 
@@ -102,18 +101,20 @@ system_prompt = system_prompt_only_top
 # gpt_model = "gpt-4-vision-preview"
 gpt_model = "gpt-4o-2024-05-13"
 
+
 def get_openai_client():
-    client = OpenAI(
-        api_key=os.getenv('OPENAI_API_KEY')
-    )
+    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     return client
 
+
 # Function to encode the image as base64
-def encode_image_for_openai(image_path: str, resize = False, target_size: int=512):
+def encode_image_for_openai(image_path: str,
+                            resize=False,
+                            target_size: int = 512):
     print(f"Checking if image exists at path: {image_path}")
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image file not found: {image_path}")
-    
+
     if not resize:
         # Open the image
         print(f"Opening image from path: {image_path}")
@@ -121,13 +122,14 @@ def encode_image_for_openai(image_path: str, resize = False, target_size: int=51
             encoded_image = base64.b64encode(img_file.read()).decode('utf-8')
             print("Image encoded in base64 format.")
         return encoded_image
-    
+
     print(f"Opening image from path: {image_path}")
     with Image.open(image_path) as img:
         # Determine scaling factor to maintain aspect ratio
         original_width, original_height = img.size
-        print(f"Original image dimensions: {original_width} x {original_height}")
-        
+        print(
+            f"Original image dimensions: {original_width} x {original_height}")
+
         if original_width > original_height:
             scale = target_size / original_width
             new_width = target_size
@@ -142,63 +144,63 @@ def encode_image_for_openai(image_path: str, resize = False, target_size: int=51
         # Resizing the image
         img_resized = img.resize((new_width, new_height), Image.LANCZOS)
         print("Image resized successfully.")
-        
+
         # Convert the image to bytes and encode it in base64
         with open("temp_resized_image.jpg", "wb") as temp_file:
             img_resized.save(temp_file, format="JPEG")
             print("Resized image saved temporarily for encoding.")
-        
+
         # Open the temporarily saved image for base64 encoding
         with open("temp_resized_image.jpg", "rb") as temp_file:
             encoded_image = base64.b64encode(temp_file.read()).decode('utf-8')
             print("Image encoded in base64 format.")
-        
+
         # Clean up the temporary file
         os.remove("temp_resized_image.jpg")
         print("Temporary file removed.")
 
     return encoded_image
 
+
 def consolidate_captions(client: OpenAI, captions: list):
     # Formatting the captions into a single string prompt
-    captions_text = "\n".join([f"{cap['caption']}" for cap in captions if cap['caption'] is not None])
+    captions_text = "\n".join(
+        [f"{cap['caption']}" for cap in captions if cap['caption'] is not None])
     user_query = f"Here are several captions for the same object:\n{captions_text}\n\nPlease consolidate these into a single, clear caption that accurately describes the object."
 
-    messages = [
-        {
-            "role": "system",
-            "content": system_prompt_consolidate_captions
-        },
-        {
-            "role": "user",
-            "content": user_query
-        }
-    ]
+    messages = [{
+        "role": "system",
+        "content": system_prompt_consolidate_captions
+    }, {
+        "role": "user",
+        "content": user_query
+    }]
 
     consolidated_caption = ""
     try:
         response = client.chat.completions.create(
             model=f"{gpt_model}",
             messages=messages,
-            response_format={"type": "json_object"}
-        )
-        
+            response_format={"type": "json_object"})
+
         consolidated_caption_json = response.choices[0].message.content.strip()
-        consolidated_caption = json.loads(consolidated_caption_json).get("consolidated_caption", "")
+        consolidated_caption = json.loads(consolidated_caption_json).get(
+            "consolidated_caption", "")
         print(f"Consolidated Caption: {consolidated_caption}")
-        
+
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         consolidated_caption = ""
 
     return consolidated_caption
-    
+
+
 def extract_list_of_tuples(text: str):
     # Pattern to match a list of tuples, considering a list that starts with '[' and ends with ']'
     # and contains any characters in between, including nested lists/tuples.
     text = text.replace('\n', ' ')
     pattern = r'\[.*?\]'
-    
+
     # Search for the pattern in the text
     match = re.search(pattern, text)
     if match:
@@ -217,14 +219,15 @@ def extract_list_of_tuples(text: str):
         # No matching pattern found
         print("No list of tuples found in the text.")
         return []
-    
+
+
 def vlm_extract_object_captions(text: str):
     # Replace newlines with spaces for uniformity
     text = text.replace('\n', ' ')
-    
+
     # Pattern to match the list of objects
     pattern = r'\[(.*?)\]'
-    
+
     # Search for the pattern in the text
     match = re.search(pattern, text)
     if match:
@@ -251,47 +254,42 @@ def vlm_extract_object_captions(text: str):
         # No matching pattern found
         print("No list of objects found in the text.")
         return []
-    
-def get_obj_rel_from_image_gpt4v(client: OpenAI, image_path: str, label_list: list):
+
+
+def get_obj_rel_from_image_gpt4v(client: OpenAI, image_path: str,
+                                 label_list: list):
     # Getting the base64 string
     base64_image = encode_image_for_openai(image_path)
-    
+
     global system_prompt
     global gpt_model
-    
+
     user_query = f"Here is the list of labels for the annotations of the objects in the image: {label_list}. Please describe the spatial relationships between the objects in the image."
-    
-    
+
     vlm_answer = []
     try:
         response = client.chat.completions.create(
             model=f"{gpt_model}",
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt_only_top
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}",
-                            },
-                        },
-                    ],
-                },
-                {
-                    "role": "user",
-                    "content": user_query
-                }
-            ]
-        )
-        
+            messages=[{
+                "role": "system",
+                "content": system_prompt_only_top
+            }, {
+                "role":
+                    "user",
+                "content": [{
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}",
+                    },
+                },],
+            }, {
+                "role": "user",
+                "content": user_query
+            }])
+
         vlm_answer_str = response.choices[0].message.content
         print(f"Line 113, vlm_answer_str: {vlm_answer_str}")
-        
+
         vlm_answer = extract_list_of_tuples(vlm_answer_str)
 
     except Exception as e:
@@ -300,53 +298,44 @@ def get_obj_rel_from_image_gpt4v(client: OpenAI, image_path: str, label_list: li
         vlm_answer = []
     print(f"Line 68, user_query: {user_query}")
     print(f"Line 97, vlm_answer: {vlm_answer}")
-    
-    
+
     return vlm_answer
 
-    
-def get_obj_captions_from_image_gpt4v(client: OpenAI, image_path: str, label_list: list):
+
+def get_obj_captions_from_image_gpt4v(client: OpenAI, image_path: str,
+                                      label_list: list):
     # Getting the base64 string
     base64_image = encode_image_for_openai(image_path)
-    
+
     global system_prompt
-    
 
     user_query = f"Here is the list of labels for the annotations of the objects in the image: {label_list}. Please accurately caption the objects in the image."
-    
-    messages=[
-        {
-            "role": "system",
-            "content": system_prompt_captions
-        },
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{base64_image}",
-                    },
-                },
-            ],
-        },
-        {
-            "role": "user",
-            "content": user_query
-        }
-    ]
-    
-    
+
+    messages = [{
+        "role": "system",
+        "content": system_prompt_captions
+    }, {
+        "role":
+            "user",
+        "content": [{
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{base64_image}",
+            },
+        },],
+    }, {
+        "role": "user",
+        "content": user_query
+    }]
+
     vlm_answer_captions = []
     try:
-        response = client.chat.completions.create(
-            model=f"{gpt_model}",
-            messages=messages
-        )
-        
+        response = client.chat.completions.create(model=f"{gpt_model}",
+                                                  messages=messages)
+
         vlm_answer_str = response.choices[0].message.content
         print(f"Line 113, vlm_answer_str: {vlm_answer_str}")
-        
+
         vlm_answer_captions = vlm_extract_object_captions(vlm_answer_str)
 
     except Exception as e:
@@ -355,6 +344,5 @@ def get_obj_captions_from_image_gpt4v(client: OpenAI, image_path: str, label_lis
         vlm_answer_captions = []
     print(f"Line 68, user_query: {user_query}")
     print(f"Line 97, vlm_answer: {vlm_answer_captions}")
-    
-    
+
     return vlm_answer_captions

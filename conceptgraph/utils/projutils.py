@@ -8,7 +8,6 @@ https://github.com/gradslam/gradslam
 I'm just removing the gradslam dependency to make conceptgraphs easier to install.
 
 """
-
 """
 Projective geometry utility functions.
 """
@@ -42,14 +41,12 @@ def homogenize_points(pts: torch.Tensor):
     """
     if not isinstance(pts, torch.Tensor):
         raise TypeError(
-            "Expected input type torch.Tensor. Got {} instead".format(type(pts))
-        )
+            "Expected input type torch.Tensor. Got {} instead".format(
+                type(pts)))
     if pts.dim() < 2:
         raise ValueError(
-            "Input tensor must have at least 2 dimensions. Got {} instad.".format(
-                pts.dim()
-            )
-        )
+            "Input tensor must have at least 2 dimensions. Got {} instad.".
+            format(pts.dim()))
 
     return torch.nn.functional.pad(pts, (0, 1), "constant", 1.0)
 
@@ -80,14 +77,12 @@ def unhomogenize_points(pts: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     """
     if not isinstance(pts, torch.Tensor):
         raise TypeError(
-            "Expected input type torch.Tensor. Instead got {}".format(type(pts))
-        )
+            "Expected input type torch.Tensor. Instead got {}".format(
+                type(pts)))
     if pts.dim() < 2:
         raise ValueError(
-            "Input tensor must have at least 2 dimensions. Got {} instad.".format(
-                pts.dim()
-            )
-        )
+            "Input tensor must have at least 2 dimensions. Got {} instad.".
+            format(pts.dim()))
 
     # Get points with the last coordinate (scale) as 0 (points at infinity).
     w: torch.Tensor = pts[..., -1:]
@@ -95,14 +90,15 @@ def unhomogenize_points(pts: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     # For points at infinity, use a scale factor of 1 (used by OpenCV
     # and by kornia)
     # https://github.com/opencv/opencv/pull/14411/files
-    scale: torch.Tensor = torch.where(torch.abs(w) > eps, 1.0 / w, torch.ones_like(w))
+    scale: torch.Tensor = torch.where(
+        torch.abs(w) > eps, 1.0 / w, torch.ones_like(w))
 
     return scale * pts[..., :-1]
 
 
-def project_points(
-    cam_coords: torch.Tensor, proj_mat: torch.Tensor, eps: Optional[float] = 1e-6
-) -> torch.Tensor:
+def project_points(cam_coords: torch.Tensor,
+                   proj_mat: torch.Tensor,
+                   eps: Optional[float] = 1e-6) -> torch.Tensor:
     r"""Projects points from the camera coordinate frame to the image (pixel) frame.
 
     Args:
@@ -168,51 +164,36 @@ def project_points(
     # and Kornia.
     if not torch.is_tensor(cam_coords):
         raise TypeError(
-            "Expected input cam_coords to be of type torch.Tensor. Got {0} instead.".format(
-                type(cam_coords)
-            )
-        )
+            "Expected input cam_coords to be of type torch.Tensor. Got {0} instead."
+            .format(type(cam_coords)))
     if not torch.is_tensor(proj_mat):
         raise TypeError(
-            "Expected input proj_mat to be of type torch.Tensor. Got {0} instead.".format(
-                type(proj_mat)
-            )
-        )
+            "Expected input proj_mat to be of type torch.Tensor. Got {0} instead."
+            .format(type(proj_mat)))
     if cam_coords.dim() < 2:
         raise ValueError(
-            "Input cam_coords must have at least 2 dims. Got {0} instead.".format(
-                cam_coords.dim()
-            )
-        )
+            "Input cam_coords must have at least 2 dims. Got {0} instead.".
+            format(cam_coords.dim()))
     if cam_coords.shape[-1] not in (3, 4):
         raise ValueError(
-            "Input cam_coords must have shape (*, 3), or (*, 4). Got {0} instead.".format(
-                cam_coords.shape
-            )
-        )
+            "Input cam_coords must have shape (*, 3), or (*, 4). Got {0} instead."
+            .format(cam_coords.shape))
     if proj_mat.dim() < 2:
         raise ValueError(
             "Input proj_mat must have at least 2 dims. Got {0} instead.".format(
-                proj_mat.dim()
-            )
-        )
+                proj_mat.dim()))
     if proj_mat.shape[-1] != 4 or proj_mat.shape[-2] != 4:
         raise ValueError(
             "Input proj_mat must have shape (*, 4, 4). Got {0} instead.".format(
-                proj_mat.shape
-            )
-        )
+                proj_mat.shape))
     if proj_mat.dim() > 2 and proj_mat.dim() != cam_coords.dim():
         raise ValueError(
             "Input proj_mat must either have 2 dimensions, or have equal number of dimensions to cam_coords. "
-            "Got {0} instead.".format(proj_mat.dim())
-        )
+            "Got {0} instead.".format(proj_mat.dim()))
     if proj_mat.dim() > 2 and proj_mat.shape[0] != cam_coords.shape[0]:
         raise ValueError(
-            "Batch sizes of proj_mat and cam_coords do not match. Shapes: {0} and {1} respectively.".format(
-                proj_mat.shape, cam_coords.shape
-            )
-        )
+            "Batch sizes of proj_mat and cam_coords do not match. Shapes: {0} and {1} respectively."
+            .format(proj_mat.shape, cam_coords.shape))
 
     # Determine whether or not to homogenize `cam_coords`.
     to_homogenize: bool = cam_coords.shape[-1] == 3
@@ -233,9 +214,11 @@ def project_points(
     need_bmm: bool = pts_homo.dim() > 2
 
     if not need_bmm:
-        pts: torch.Tensor = torch.matmul(proj_mat.unsqueeze(0), pts_homo.unsqueeze(-1))
+        pts: torch.Tensor = torch.matmul(proj_mat.unsqueeze(0),
+                                         pts_homo.unsqueeze(-1))
     else:
-        pts: torch.Tensor = torch.matmul(proj_mat.unsqueeze(-3), pts_homo.unsqueeze(-1))
+        pts: torch.Tensor = torch.matmul(proj_mat.unsqueeze(-3),
+                                         pts_homo.unsqueeze(-1))
 
     # Remove the extra dimension resulting from torch.matmul()
     pts = pts.squeeze(-1)
@@ -249,9 +232,8 @@ def project_points(
     return torch.stack((u, v), dim=-1)
 
 
-def unproject_points(
-    pixel_coords: torch.Tensor, intrinsics_inv: torch.Tensor, depths: torch.Tensor
-) -> torch.Tensor:
+def unproject_points(pixel_coords: torch.Tensor, intrinsics_inv: torch.Tensor,
+                     depths: torch.Tensor) -> torch.Tensor:
     r"""Unprojects points from the image (pixel) frame to the camera coordinate frame.
 
     Args:
@@ -321,62 +303,46 @@ def unproject_points(
     """
     if not torch.is_tensor(pixel_coords):
         raise TypeError(
-            "Expected input pixel_coords to be of type torch.Tensor. Got {0} instead.".format(
-                type(pixel_coords)
-            )
-        )
+            "Expected input pixel_coords to be of type torch.Tensor. Got {0} instead."
+            .format(type(pixel_coords)))
     if not torch.is_tensor(intrinsics_inv):
         raise TypeError(
-            "Expected intrinsics_inv to be of type torch.Tensor. Got {0} instead.".format(
-                type(intrinsics_inv)
-            )
-        )
+            "Expected intrinsics_inv to be of type torch.Tensor. Got {0} instead."
+            .format(type(intrinsics_inv)))
     if not torch.is_tensor(depths):
         raise TypeError(
-            "Expected depth to be of type torch.Tensor. Got {0} instead.".format(
-                type(depths)
-            )
-        )
+            "Expected depth to be of type torch.Tensor. Got {0} instead.".
+            format(type(depths)))
     if pixel_coords.dim() < 2:
         raise ValueError(
-            "Input pixel_coords must have at least 2 dims. Got {0} instead.".format(
-                pixel_coords.dim()
-            )
-        )
+            "Input pixel_coords must have at least 2 dims. Got {0} instead.".
+            format(pixel_coords.dim()))
     if pixel_coords.shape[-1] not in (2, 3):
         raise ValueError(
-            "Input pixel_coords must have shape (*, 2), or (*, 2). Got {0} instead.".format(
-                pixel_coords.shape
-            )
-        )
+            "Input pixel_coords must have shape (*, 2), or (*, 2). Got {0} instead."
+            .format(pixel_coords.shape))
     if intrinsics_inv.dim() < 2:
         raise ValueError(
-            "Input intrinsics_inv must have at least 2 dims. Got {0} instead.".format(
-                intrinsics_inv.dim()
-            )
-        )
+            "Input intrinsics_inv must have at least 2 dims. Got {0} instead.".
+            format(intrinsics_inv.dim()))
     if intrinsics_inv.shape[-1] != 3 or intrinsics_inv.shape[-2] != 3:
         raise ValueError(
-            "Input intrinsics_inv must have shape (*, 3, 3). Got {0} instead.".format(
-                intrinsics_inv.shape
-            )
-        )
+            "Input intrinsics_inv must have shape (*, 3, 3). Got {0} instead.".
+            format(intrinsics_inv.shape))
     if intrinsics_inv.dim() > 2 and intrinsics_inv.dim() != pixel_coords.dim():
         raise ValueError(
             "Input intrinsics_inv must either have 2 dimensions, or have equal number of dimensions to pixel_coords. "
-            "Got {0} instead.".format(intrinsics_inv.dim())
-        )
-    if intrinsics_inv.dim() > 2 and intrinsics_inv.shape[0] != pixel_coords.shape[0]:
+            "Got {0} instead.".format(intrinsics_inv.dim()))
+    if intrinsics_inv.dim(
+    ) > 2 and intrinsics_inv.shape[0] != pixel_coords.shape[0]:
         raise ValueError(
-            "Batch sizes of intrinsics_inv and pixel_coords do not match. Shapes: {0} and {1} respectively.".format(
-                intrinsics_inv.shape, pixel_coords.shape
-            )
-        )
+            "Batch sizes of intrinsics_inv and pixel_coords do not match. Shapes: {0} and {1} respectively."
+            .format(intrinsics_inv.shape, pixel_coords.shape))
     if pixel_coords.shape[:-1] != depths.shape:
         raise ValueError(
             "Input pixel_coords and depths must have the same shape for all dimensions except the last. "
-            " Got {0} and {1} respectively.".format(pixel_coords.shape, depths.shape)
-        )
+            " Got {0} and {1} respectively.".format(pixel_coords.shape,
+                                                    depths.shape))
 
     # Determine whether or not to homogenize `pixel_coords`.
     to_homogenize: bool = pixel_coords.shape[-1] == 2
@@ -388,9 +354,8 @@ def unproject_points(
         pts_homo: torch.Tensor = pixel_coords
 
     # Determine whether `intrinsics_inv` needs to be expanded to match dims of `pixel_coords`.
-    to_expand_intrinsics_inv: bool = (intrinsics_inv.dim() == 2) and (
-        pts_homo.dim() > 2
-    )
+    to_expand_intrinsics_inv: bool = (intrinsics_inv.dim()
+                                      == 2) and (pts_homo.dim() > 2)
     if to_expand_intrinsics_inv:
         while intrinsics_inv.dim() < pts_homo.dim():
             intrinsics_inv = intrinsics_inv.unsqueeze(0)
@@ -399,13 +364,11 @@ def unproject_points(
     need_bmm: bool = pts_homo.dim() > 2
 
     if not need_bmm:
-        pts: torch.Tensor = torch.matmul(
-            intrinsics_inv.unsqueeze(0), pts_homo.unsqueeze(-1)
-        )
+        pts: torch.Tensor = torch.matmul(intrinsics_inv.unsqueeze(0),
+                                         pts_homo.unsqueeze(-1))
     else:
-        pts: torch.Tensor = torch.matmul(
-            intrinsics_inv.unsqueeze(-3), pts_homo.unsqueeze(-1)
-        )
+        pts: torch.Tensor = torch.matmul(intrinsics_inv.unsqueeze(-3),
+                                         pts_homo.unsqueeze(-1))
 
     # Remove the extra dimension resulting from torch.matmul()
     pts = pts.squeeze(-1)
@@ -429,21 +392,17 @@ def inverse_intrinsics(K: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     """
     if not torch.is_tensor(K):
         raise TypeError(
-            "Expected K to be of type torch.Tensor. Got {0} instead.".format(type(K))
-        )
+            "Expected K to be of type torch.Tensor. Got {0} instead.".format(
+                type(K)))
     if K.dim() < 2:
         raise ValueError(
-            "Input K must have at least 2 dims. Got {0} instead.".format(K.dim())
-        )
-    if not (
-        (K.shape[-1] == 3 and K.shape[-2] == 3)
-        or (K.shape[-1] == 4 and K.shape[-2] == 4)
-    ):
+            "Input K must have at least 2 dims. Got {0} instead.".format(
+                K.dim()))
+    if not ((K.shape[-1] == 3 and K.shape[-2] == 3) or
+            (K.shape[-1] == 4 and K.shape[-2] == 4)):
         raise ValueError(
-            "Input K must have shape (*, 4, 4) or (*, 3, 3). Got {0} instead.".format(
-                K.shape
-            )
-        )
+            "Input K must have shape (*, 4, 4) or (*, 3, 3). Got {0} instead.".
+            format(K.shape))
 
     Kinv = torch.zeros_like(K)
 

@@ -4,6 +4,7 @@ import os
 import base64
 import requests
 
+
 # Function to encode the image as base64
 def encode_image_for_openai(image_path: str):
     # check if the image exists
@@ -12,16 +13,13 @@ def encode_image_for_openai(image_path: str):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
+
 # Getting the base64 string
 img_path = '/home/kuwajerw/new_local_data/new_record3d/ali_apartment/apt_scan_no_smooth_processed/exps/s_detections_stride1_69/vis/160_for_vlm.jpg'
 base64_image = encode_image_for_openai(str(img_path))
 
-
 # Initialize OpenAI client with the new format
-client = OpenAI(
-  api_key=os.getenv('OPENAI_API_KEY')
-)
-
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 system_prompt = '''
     You are an agent specialized in describing the spatial relationships between objects in an annotated image.
@@ -40,33 +38,31 @@ system_prompt = '''
     
 '''
 
+
 def analyze_image():
     response = client.chat.completions.create(
-    model="gpt-4-vision-preview",
-    messages=[
-        {
+        model="gpt-4-vision-preview",
+        messages=[{
             "role": "system",
             "content": system_prompt
-        },
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url",
-                    "image_url": f"data:image/jpeg;base64,{base64_image}",
-                },
-            ],
-        },
-        {
-            "role": "user",
-            "content": "Return the spatial relationships between the objects in the image."
-        }
-    ],
+        }, {
+            "role":
+                "user",
+            "content": [{
+                "type": "image_url",
+                "image_url": f"data:image/jpeg;base64,{base64_image}",
+            },],
+        }, {
+            "role":
+                "user",
+            "content":
+                "Return the spatial relationships between the objects in the image."
+        }],
         max_tokens=300,
-        top_p=0.1
-    )
+        top_p=0.1)
 
     return response.choices[0].message.content
+
 
 result = analyze_image()
 print(result)

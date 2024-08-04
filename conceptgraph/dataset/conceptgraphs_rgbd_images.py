@@ -13,9 +13,9 @@ import plotly.graph_objects as go
 __all__ = ["RGBDImages"]
 
 
-def create_meshgrid(
-    height: int, width: int, normalized_coords: Optional[bool] = True
-) -> torch.Tensor:
+def create_meshgrid(height: int,
+                    width: int,
+                    normalized_coords: Optional[bool] = True) -> torch.Tensor:
     r"""Generates a coordinate grid for an image.
 
     When `normalized_coords` is set to True, the grid is normalized to
@@ -45,7 +45,7 @@ def create_meshgrid(
         ys = torch.linspace(0, width - 1, width)
     # Generate grid (2 x H x W)
     base_grid: torch.Tensor = torch.stack((torch.meshgrid([xs, ys])))
-    return base_grid.permute(1, 2, 0).unsqueeze(0) 
+    return base_grid.permute(1, 2, 0).unsqueeze(0)
 
 
 def inverse_intrinsics(K: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
@@ -64,21 +64,17 @@ def inverse_intrinsics(K: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     """
     if not torch.is_tensor(K):
         raise TypeError(
-            "Expected K to be of type torch.Tensor. Got {0} instead.".format(type(K))
-        )
+            "Expected K to be of type torch.Tensor. Got {0} instead.".format(
+                type(K)))
     if K.dim() < 2:
         raise ValueError(
-            "Input K must have at least 2 dims. Got {0} instead.".format(K.dim())
-        )
-    if not (
-        (K.shape[-1] == 3 and K.shape[-2] == 3)
-        or (K.shape[-1] == 4 and K.shape[-2] == 4)
-    ):
+            "Input K must have at least 2 dims. Got {0} instead.".format(
+                K.dim()))
+    if not ((K.shape[-1] == 3 and K.shape[-2] == 3) or
+            (K.shape[-1] == 4 and K.shape[-2] == 4)):
         raise ValueError(
-            "Input K must have shape (*, 4, 4) or (*, 3, 3). Got {0} instead.".format(
-                K.shape
-            )
-        )
+            "Input K must have shape (*, 4, 4) or (*, 3, 3). Got {0} instead.".
+            format(K.shape))
 
     Kinv = torch.zeros_like(K)
 
@@ -94,6 +90,7 @@ def inverse_intrinsics(K: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
     Kinv[..., 2, 2] = 1
     Kinv[..., -1, -1] = 1
     return Kinv
+
 
 def img_to_b64str(img, quality=95):
     r"""Converts a numpy array of uint8 into a base64 jpeg string.
@@ -119,7 +116,12 @@ def img_to_b64str(img, quality=95):
     base64_string = prefix + imstr
     return base64_string
 
-def numpy_to_plotly_image(img, name=None, is_depth=False, scale=None, quality=95):
+
+def numpy_to_plotly_image(img,
+                          name=None,
+                          is_depth=False,
+                          scale=None,
+                          quality=95):
     r"""Converts a numpy array img to a `plotly.graph_objects.Image` object.
 
     Args
@@ -251,17 +253,16 @@ class RGBDImages(object):
 
         # input ndim checks
         if rgb_image.ndim != 5:
-            msg = "rgb_image should have ndim=5, but had ndim={}".format(rgb_image.ndim)
+            msg = "rgb_image should have ndim=5, but had ndim={}".format(
+                rgb_image.ndim)
             raise ValueError(msg)
         if depth_image.ndim != 5:
             msg = "depth_image should have ndim=5, but had ndim={}".format(
-                depth_image.ndim
-            )
+                depth_image.ndim)
             raise ValueError(msg)
         if intrinsics.ndim != 4:
             msg = "intrinsics should have ndim=4, but had ndim={}".format(
-                intrinsics.ndim
-            )
+                intrinsics.ndim)
             raise ValueError(msg)
         if poses is not None and poses.ndim != 4:
             msg = "poses should have ndim=4, but had ndim={}".format(poses.ndim)
@@ -269,13 +270,12 @@ class RGBDImages(object):
 
         self._rgb_image_shape = rgb_image.shape
         self._depth_shape = tuple(
-            v if i != self.cdim else 1 for i, v in enumerate(rgb_image.shape)
-        )
+            v if i != self.cdim else 1 for i, v in enumerate(rgb_image.shape))
         self._intrinsics_shape = (rgb_image.shape[0], 1, 4, 4)
         self._poses_shape = (*rgb_image.shape[:2], 4, 4)
         self._pixel_pos_shape = (
-            *rgb_image.shape[: self.cdim],
-            *rgb_image.shape[self.cdim + 1 :],
+            *rgb_image.shape[:self.cdim],
+            *rgb_image.shape[self.cdim + 1:],
             3,
         )
 
@@ -316,7 +316,8 @@ class RGBDImages(object):
             raise ValueError(msg.format(self._depth_shape, depth_image.shape))
         if intrinsics.shape != self._intrinsics_shape:
             msg = "Expected intrinsics to have shape {0}. Got {1} instead"
-            raise ValueError(msg.format(self._intrinsics_shape, intrinsics.shape))
+            raise ValueError(
+                msg.format(self._intrinsics_shape, intrinsics.shape))
         if poses is not None and (poses.shape != self._poses_shape):
             msg = "Expected poses to have shape {0}. Got {1} instead"
             raise ValueError(msg.format(self._poses_shape, poses.shape))
@@ -329,17 +330,16 @@ class RGBDImages(object):
         devices = [x.device for x in inputs if x is not None]
         if len(set(devices)) != 1:
             raise ValueError(
-                "All inputs must be on same device, but got more than 1 device: {}".format(
-                    set(devices)
-                )
-            )
+                "All inputs must be on same device, but got more than 1 device: {}"
+                .format(set(devices)))
 
         self._rgb_image = rgb_image if device is None else rgb_image.to(device)
         self.device = self._rgb_image.device
         self._depth_image = depth_image.to(self.device)
         self._intrinsics = intrinsics.to(self.device)
         self._poses = poses.to(self.device) if poses is not None else None
-        self._pixel_pos = pixel_pos.to(self.device) if pixel_pos is not None else None
+        self._pixel_pos = pixel_pos.to(
+            self.device) if pixel_pos is not None else None
 
         self._vertex_map = None
         self._global_vertex_map = None
@@ -348,16 +348,10 @@ class RGBDImages(object):
         self._valid_depth_mask = None
 
         self._B, self._L = self._rgb_image.shape[:2]
-        self.h = (
-            self._rgb_image.shape[3]
-            if self._channels_first
-            else self._rgb_image.shape[2]
-        )
-        self.w = (
-            self._rgb_image.shape[4]
-            if self._channels_first
-            else self._rgb_image.shape[3]
-        )
+        self.h = (self._rgb_image.shape[3]
+                  if self._channels_first else self._rgb_image.shape[2])
+        self.w = (self._rgb_image.shape[4]
+                  if self._channels_first else self._rgb_image.shape[3])
         self.shape = (self._B, self._L, self.h, self.w)
 
     def __getitem__(self, index):
@@ -372,7 +366,8 @@ class RGBDImages(object):
         if isinstance(index, tuple) or isinstance(index, int):
             _index_slices = ()
             if isinstance(index, int):
-                _index_slices += (slice(index, index + 1),) + (slice(None, None),)
+                _index_slices += (slice(index, index + 1),) + (slice(
+                    None, None),)
             elif len(index) > 2:
                 raise IndexError("Only batch and sequences can be indexed")
             elif isinstance(index, tuple):
@@ -385,16 +380,12 @@ class RGBDImages(object):
             new_rgb = self._rgb_image[_index_slices[0], _index_slices[1]]
             if new_rgb.shape[0] == 0:
                 raise IndexError(
-                    "Incorrect indexing at dimension 0, make sure range is within 0 and {0}".format(
-                        self._B
-                    )
-                )
+                    "Incorrect indexing at dimension 0, make sure range is within 0 and {0}"
+                    .format(self._B))
             if new_rgb.shape[1] == 0:
                 raise IndexError(
-                    "Incorrect indexing at dimension 1, make sure range is within 0 and {0}".format(
-                        self._L
-                    )
-                )
+                    "Incorrect indexing at dimension 1, make sure range is within 0 and {0}"
+                    .format(self._L))
             new_depth = self._depth_image[_index_slices[0], _index_slices[1]]
             new_intrinsics = self._intrinsics[_index_slices[0], :]
             new_embeddings = None  # KM
@@ -403,7 +394,8 @@ class RGBDImages(object):
 
             new_confidence_image = None
             if self.has_confidence_image:
-                new_confidence_image = self._confidence_image[_index_slices[0], :]
+                new_confidence_image = self._confidence_image[
+                    _index_slices[0], :]
 
             other = RGBDImages(
                 new_rgb,
@@ -857,9 +849,9 @@ class RGBDImages(object):
         return self
 
     @staticmethod
-    def _permute_if_not_None(
-        tensor: Optional[torch.Tensor], ordering: tuple, contiguous: bool = True
-    ):
+    def _permute_if_not_None(tensor: Optional[torch.Tensor],
+                             ordering: tuple,
+                             contiguous: bool = True):
         r"""Permutes input if it is not None based on given ordering
 
         Args:
@@ -874,23 +866,18 @@ class RGBDImages(object):
         if tensor is None:
             return None
         assert torch.is_tensor(tensor)
-        return (
-            tensor.permute(*ordering).contiguous()
-            if contiguous
-            else tensor.permute(*ordering)
-        )
+        return (tensor.permute(*ordering).contiguous()
+                if contiguous else tensor.permute(*ordering))
 
     def _compute_vertex_map(self):
         r"""Coverts a batch of depth images into a batch of vertex maps."""
         B, L = self.shape[:2]
         device = self._depth_image.device
         if self._pixel_pos is None:
-            meshgrid = (
-                create_meshgrid(self.h, self.w, normalized_coords=False)
-                .view(1, 1, self.h, self.w, 2)
-                .repeat(B, L, 1, 1, 1)
-                .to(device)
-            )
+            meshgrid = (create_meshgrid(self.h, self.w,
+                                        normalized_coords=False).view(
+                                            1, 1, self.h, self.w,
+                                            2).repeat(B, L, 1, 1, 1).to(device))
             self._pixel_pos = torch.cat(
                 [
                     meshgrid[..., 1:],
@@ -905,18 +892,15 @@ class RGBDImages(object):
         # Add an extra channel of ones to meshgrid for z values
         if self.channels_first:
             self._vertex_map = (
-                torch.einsum("bsjc,bshwc->bsjhw", Kinv, self._pixel_pos)
-                * self._depth_image
-            )
+                torch.einsum("bsjc,bshwc->bsjhw", Kinv, self._pixel_pos) *
+                self._depth_image)
         else:
             self._vertex_map = (
-                torch.einsum("bsjc,bshwc->bshwj", Kinv, self._pixel_pos)
-                * self._depth_image
-            )
+                torch.einsum("bsjc,bshwc->bshwj", Kinv, self._pixel_pos) *
+                self._depth_image)
         # zero out missing depth values
         self._vertex_map = self._vertex_map * self.valid_depth_mask.to(
-            self._vertex_map.dtype
-        )
+            self._vertex_map.dtype)
 
     def _compute_global_vertex_map(self):
         r"""Coverts a batch of local vertex maps into a batch of global vertex maps."""
@@ -932,20 +916,19 @@ class RGBDImages(object):
         # TODO: Time tests for all einsums. Might not be efficient (especially on cpu).
         # Add an extra channel of ones to meshgrid for z values
         if self.channels_first:
-            self._global_vertex_map = torch.einsum(
-                "bsjc,bschw->bsjhw", rmat, local_vertex_map
-            )
-            self._global_vertex_map = self._global_vertex_map + tvec.view(B, L, 3, 1, 1)
+            self._global_vertex_map = torch.einsum("bsjc,bschw->bsjhw", rmat,
+                                                   local_vertex_map)
+            self._global_vertex_map = self._global_vertex_map + tvec.view(
+                B, L, 3, 1, 1)
         else:
-            self._global_vertex_map = torch.einsum(
-                "bsjc,bshwc->bshwj", rmat, local_vertex_map
-            )
-            self._global_vertex_map = self._global_vertex_map + tvec.view(B, L, 1, 1, 3)
+            self._global_vertex_map = torch.einsum("bsjc,bshwc->bshwj", rmat,
+                                                   local_vertex_map)
+            self._global_vertex_map = self._global_vertex_map + tvec.view(
+                B, L, 1, 1, 3)
 
         # zero out missing depth values
         self._global_vertex_map = self._global_vertex_map * self.valid_depth_mask.to(
-            self._global_vertex_map.dtype
-        )
+            self._global_vertex_map.dtype)
 
     def _compute_normal_map(self):
         r"""Converts a batch of vertex maps to a batch of normal maps."""
@@ -953,20 +936,18 @@ class RGBDImages(object):
         dverti: torch.Tensor = torch.zeros_like(self.vertex_map)
 
         if self.channels_first:
-            dhoriz[..., :-1] = self.vertex_map[..., 1:] - self.vertex_map[..., :-1]
-            dverti[..., :-1, :] = (
-                self.vertex_map[..., 1:, :] - self.vertex_map[..., :-1, :]
-            )
+            dhoriz[..., :-1] = self.vertex_map[...,
+                                               1:] - self.vertex_map[..., :-1]
+            dverti[..., :-1, :] = (self.vertex_map[..., 1:, :] -
+                                   self.vertex_map[..., :-1, :])
             dhoriz[..., -1] = dhoriz[..., -2]
             dverti[..., -1, :] = dverti[..., -2, :]
             dim = 2
         else:
-            dhoriz[..., :-1, :] = (
-                self.vertex_map[..., 1:, :] - self.vertex_map[..., :-1, :]
-            )
-            dverti[..., :-1, :, :] = (
-                self.vertex_map[..., 1:, :, :] - self.vertex_map[..., :-1, :, :]
-            )
+            dhoriz[..., :-1, :] = (self.vertex_map[..., 1:, :] -
+                                   self.vertex_map[..., :-1, :])
+            dverti[..., :-1, :, :] = (self.vertex_map[..., 1:, :, :] -
+                                      self.vertex_map[..., :-1, :, :])
             dhoriz[..., -1, :] = dhoriz[..., -2, :]
             dverti[..., -1, :, :] = dverti[..., -2, :, :]
             dim = -1
@@ -975,12 +956,10 @@ class RGBDImages(object):
         norm: torch.Tensor = normal_map.norm(dim=dim).unsqueeze(dim)
 
         self._normal_map: torch.Tensor = normal_map / torch.where(
-            norm == 0, torch.ones_like(norm), norm
-        )
+            norm == 0, torch.ones_like(norm), norm)
         # zero out missing depth values
         self._normal_map = self._normal_map * self.valid_depth_mask.to(
-            self._normal_map.dtype
-        )
+            self._normal_map.dtype)
 
     def _compute_global_normal_map(self):
         r"""Coverts a batch of local noraml maps into a batch of global normal maps."""
@@ -993,13 +972,11 @@ class RGBDImages(object):
         B, L = self.shape[:2]
         rmat = self._poses[..., :3, :3]
         if self.channels_first:
-            self._global_normal_map = torch.einsum(
-                "bsjc,bschw->bsjhw", rmat, local_normal_map
-            )
+            self._global_normal_map = torch.einsum("bsjc,bschw->bsjhw", rmat,
+                                                   local_normal_map)
         else:
-            self._global_normal_map = torch.einsum(
-                "bsjc,bshwc->bshwj", rmat, local_normal_map
-            )
+            self._global_normal_map = torch.einsum("bsjc,bshwc->bshwj", rmat,
+                                                   local_normal_map)
 
     def plotly(
         self,
@@ -1039,14 +1016,21 @@ class RGBDImages(object):
             returns a list of dicts (`frames`).
         """
         if not isinstance(index, int):
-            raise TypeError("Index should be int, but was {}.".format(type(index)))
+            raise TypeError("Index should be int, but was {}.".format(
+                type(index)))
 
         def frame_args(duration):
             return {
-                "frame": {"duration": duration, "redraw": True},
+                "frame": {
+                    "duration": duration,
+                    "redraw": True
+                },
                 "mode": "immediate",
                 "fromcurrent": True,
-                "transition": {"duration": duration, "easing": "linear"},
+                "transition": {
+                    "duration": duration,
+                    "easing": "linear"
+                },
             }
 
         torch_rgb = self.rgb_image[index]
@@ -1054,67 +1038,80 @@ class RGBDImages(object):
             torch_rgb = torch_rgb * 255
         torch_rgb = torch.clamp(torch_rgb, min=0.0, max=255.0)
         numpy_rgb = torch_rgb.detach().cpu().numpy().astype("uint8")
-        Image_rgb = [numpy_to_plotly_image(rgb, i) for i, rgb in enumerate(numpy_rgb)]
+        Image_rgb = [
+            numpy_to_plotly_image(rgb, i) for i, rgb in enumerate(numpy_rgb)
+        ]
 
         if not include_depth:
-            frames = [{"data": [frame], "name": i} for i, frame in enumerate(Image_rgb)]
+            frames = [{
+                "data": [frame],
+                "name": i
+            } for i, frame in enumerate(Image_rgb)]
         else:
             torch_depth = self.depth_image[index, ..., 0]
-            scale = 10 ** torch.log10(255.0 / torch_depth.detach().max()).floor().item()
-            numpy_depth = (torch_depth * scale).detach().cpu().numpy().astype("uint8")
+            scale = 10**torch.log10(255.0 /
+                                    torch_depth.detach().max()).floor().item()
+            numpy_depth = (torch_depth *
+                           scale).detach().cpu().numpy().astype("uint8")
             Image_depth = [
                 numpy_to_plotly_image(d, i, True, scale)
                 for i, d in enumerate(numpy_depth)
             ]
-            frames = [
-                {"name": i, "data": list(frame), "traces": [0, 1]}
-                for i, frame in enumerate(zip(Image_rgb, Image_depth))
-            ]
+            frames = [{
+                "name": i,
+                "data": list(frame),
+                "traces": [0, 1]
+            } for i, frame in enumerate(zip(Image_rgb, Image_depth))]
 
         if not as_figure:
             return frames
 
-        steps = [
-            {"args": [[i], frame_args(0)], "label": i, "method": "animate"}
-            for i in range(self._L)
-        ]
-        sliders = [
-            {
-                "active": 0,
-                "yanchor": "top",
-                "xanchor": "left",
-                "currentvalue": {"prefix": "Frame: "},
-                "pad": {"b": 10, "t": 60},
-                "len": 0.9,
-                "x": 0.1,
-                "y": 0,
-                "steps": steps,
-            }
-        ]
-        updatemenus = [
-            {
-                "buttons": [
-                    {
-                        "args": [None, frame_args(ms_per_frame)],
-                        "label": "&#9654;",
-                        "method": "animate",
-                    },
-                    {
-                        "args": [[None], frame_args(0)],
-                        "label": "&#9724;",
-                        "method": "animate",
-                    },
-                ],
-                "direction": "left",
-                "pad": {"r": 10, "t": 70},
-                "showactive": False,
-                "type": "buttons",
-                "x": 0.1,
-                "xanchor": "right",
-                "y": 0,
-                "yanchor": "top",
-            }
-        ]
+        steps = [{
+            "args": [[i], frame_args(0)],
+            "label": i,
+            "method": "animate"
+        } for i in range(self._L)]
+        sliders = [{
+            "active": 0,
+            "yanchor": "top",
+            "xanchor": "left",
+            "currentvalue": {
+                "prefix": "Frame: "
+            },
+            "pad": {
+                "b": 10,
+                "t": 60
+            },
+            "len": 0.9,
+            "x": 0.1,
+            "y": 0,
+            "steps": steps,
+        }]
+        updatemenus = [{
+            "buttons": [
+                {
+                    "args": [None, frame_args(ms_per_frame)],
+                    "label": "&#9654;",
+                    "method": "animate",
+                },
+                {
+                    "args": [[None], frame_args(0)],
+                    "label": "&#9724;",
+                    "method": "animate",
+                },
+            ],
+            "direction": "left",
+            "pad": {
+                "r": 10,
+                "t": 70
+            },
+            "showactive": False,
+            "type": "buttons",
+            "x": 0.1,
+            "xanchor": "right",
+            "y": 0,
+            "yanchor": "top",
+        }]
 
         if not include_depth:
             fig = make_subplots(rows=1, cols=1, subplot_titles=("RGB",))
@@ -1128,12 +1125,14 @@ class RGBDImages(object):
                 shared_yaxes=False,
                 vertical_spacing=0.1,
             )
-            fig.add_trace(frames[0]["data"][0], row=1, col=1)  # initial rgb frame
-            fig.add_trace(frames[0]["data"][1], row=2, col=1)  # initial depth frame
+            fig.add_trace(frames[0]["data"][0], row=1,
+                          col=1)  # initial rgb frame
+            fig.add_trace(frames[0]["data"][1], row=2,
+                          col=1)  # initial depth frame
             fig.update_layout(scene=dict(aspectmode="data"))
             fig.update_layout(
-                autosize=False, height=1080
-            )  # autosize is not perfect with subplots
+                autosize=False,
+                height=1080)  # autosize is not perfect with subplots
 
         fig.update(frames=frames)
         fig.update_layout(updatemenus=updatemenus, sliders=sliders)
@@ -1149,7 +1148,8 @@ class RGBDImages(object):
             shape (tuple): Expected shape of value
         """
         if not isinstance(value, torch.Tensor):
-            raise TypeError("value must be torch.Tensor. Got {}".format(type(value)))
+            raise TypeError("value must be torch.Tensor. Got {}".format(
+                type(value)))
         if value.shape != shape:
             msg = "Expected value to have shape {0}. Got {1} instead"
             raise ValueError(msg.format(shape, value.shape))
