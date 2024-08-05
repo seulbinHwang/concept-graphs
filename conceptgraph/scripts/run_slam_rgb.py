@@ -61,9 +61,9 @@ export CG_FOLDER=/path/to/concept-graphs/
 export REPLICA_CONFIG_PATH=${CG_FOLDER}/conceptgraph/dataset/
     dataconfigs/replica/replica.yaml
 
-
+source env_vars.bash
 SCENE_NAME=room0
-python scripts/run_slam_rgb.py \
+python -m conceptgraph.scripts.run_slam_rgb \
     --dataset_root $REPLICA_ROOT \
     --dataset_config $REPLICA_CONFIG_PATH \
     --scene_id $SCENE_NAME \

@@ -61,13 +61,13 @@ sys.path.append(
 sys.path.append(EFFICIENTSAM_PATH)
 
 import torchvision.transforms as TS
-try:
-    from ram.models import ram
-    from ram.models import tag2text
-    from ram import inference_tag2text, inference_ram
-except ImportError as e:
-    print("RAM sub-package not found. Please check your GSA_PATH. ")
-    raise e
+# try:
+#     from ram.models import ram
+#     from ram.models import tag2text
+#     from ram import inference_tag2text, inference_ram
+# except ImportError as e:
+#     print("RAM sub-package not found. Please check your GSA_PATH. ")
+#     raise e
 
 # Disable torch gradient computation
 torch.set_grad_enabled(False)
@@ -79,8 +79,8 @@ GROUNDING_DINO_CHECKPOINT_PATH = os.path.join(GSA_PATH,
                                               "./groundingdino_swint_ogc.pth")
 
 # Segment-Anything checkpoint
-SAM_ENCODER_VERSION = "vit_h"
-SAM_CHECKPOINT_PATH = os.path.join(GSA_PATH, "./sam_vit_h_4b8939.pth")
+SAM_ENCODER_VERSION = "vit_b"
+SAM_CHECKPOINT_PATH = os.path.join(GSA_PATH, "./sam_vit_b_01ec64.pth")
 
 # Tag2Text checkpoint
 TAG2TEXT_CHECKPOINT_PATH = os.path.join(TAG2TEXT_PATH,
@@ -352,7 +352,7 @@ def process_ai2thor_classes(classes: List[str],
 def main(args: argparse.Namespace):
     ### Initialize the Grounding DINO model ###
     """
-python scripts/generate_gsa_results.py \
+python -m conceptgraph.scripts.generate_gsa_results \
     --dataset_root $REPLICA_ROOT \
     --dataset_config $REPLICA_CONFIG_PATH \
     --scene_id $SCENE_NAME \
@@ -488,7 +488,7 @@ python scripts/generate_gsa_results.py \
         detections_save_path = (args.dataset_root / args.scene_id /
                                 f"gsa_detections_{save_name}" / color_path.name)
         detections_save_path = (detections_save_path.with_suffix(".pkl.gz"))
-
+        # TODO
         os.makedirs(os.path.dirname(vis_save_path), exist_ok=True)
         os.makedirs(os.path.dirname(detections_save_path), exist_ok=True)
 
