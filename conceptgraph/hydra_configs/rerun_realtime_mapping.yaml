@@ -1,8 +1,8 @@
 defaults:
   - base
   - base_mapping
-  # - replica
-  - record3d
+  - replica
+#  - record3d
   - sam
   - classes
   - logging_level
