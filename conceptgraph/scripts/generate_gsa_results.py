@@ -483,8 +483,10 @@ python -m conceptgraph.scripts.generate_gsa_results \
 
         color_path = Path(color_path)
 
+        # vis_save_path: gsa_vis_none/frame000000.jpg
         vis_save_path = (args.dataset_root / args.scene_id /
                          f"gsa_vis_{save_name}" / color_path.name)
+        # detections_save_path: gsa_detections_none/frame000000.pkl.gz
         detections_save_path = (args.dataset_root / args.scene_id /
                                 f"gsa_detections_{save_name}" / color_path.name)
         detections_save_path = (detections_save_path.with_suffix(".pkl.gz"))
@@ -545,7 +547,7 @@ python -m conceptgraph.scripts.generate_gsa_results \
             )
 
         # add classes to global classes
-        global_classes.update(classes)
+        global_classes.update(classes) # "item"
 
         if args.accumu_classes:
             # Use all the classes that have been seen so far
