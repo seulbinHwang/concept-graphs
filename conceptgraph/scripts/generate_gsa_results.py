@@ -352,12 +352,14 @@ def process_ai2thor_classes(classes: List[str],
 def main(args: argparse.Namespace):
     ### Initialize the Grounding DINO model ###
     """
+source env_vars.bash
+SCENE_NAME=room0
 python -m conceptgraph.scripts.generate_gsa_results \
     --dataset_root $REPLICA_ROOT \
     --dataset_config $REPLICA_CONFIG_PATH \
     --scene_id $SCENE_NAME \
     --class_set none \
-    --stride 5
+    --stride 50
     """
     """
         dataconfig: $REPLICA_CONFIG_PATH

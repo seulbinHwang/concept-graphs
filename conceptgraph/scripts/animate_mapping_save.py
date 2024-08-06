@@ -25,7 +25,10 @@ from conceptgraph.utils.general_utils import to_numpy
 from conceptgraph.utils.vis import vis_result_fast, vis_result_slow_caption
 from conceptgraph.slam.slam_classes import MapObjectList
 from conceptgraph.slam.utils import filter_gobs
+"""
+python -m conceptgraph.scripts.animate_mapping_save --input_folder $REPLICA_ROOT/$SCENE_NAME/objects_all_frames/none_overlap_maskconf0.95_simsum1.2_dbscan.1_merge20_masksub
 
+"""
 
 def get_parser():
     parser = argparse.ArgumentParser(

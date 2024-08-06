@@ -4,7 +4,7 @@
 
 export CG_FOLDER=~/PycharmProjects/concept-graphs
 
-export GSA_PATH=/path/to/Grounded-Segment-Anything
+export GSA_PATH=~/PycharmProjects/concept-graphs/Grounded-Segment-Anything
 
 export REPLICA_ROOT=~/PycharmProjects/concept-graphs/Datasets/Replica
 export REPLICA_CONFIG_PATH=${CG_FOLDER}/conceptgraph/dataset/dataconfigs/replica/replica.yaml

@@ -18,6 +18,10 @@ from conceptgraph.utils.vis import better_camera_frustum, LineMesh
 
 import distinctipy
 
+"""
+python -m conceptgraph.scripts.animate_mapping_interactive --input_folder $REPLICA_ROOT/$SCENE_NAME/objects_all_frames/none_overlap_maskconf0.95_simsum1.2_dbscan.1_merge20_masksub
+
+"""
 
 class COLOR_MODE(Enum):
     RGB = 0
