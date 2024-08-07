@@ -216,7 +216,7 @@ def main(cfg: DictConfig):
             image = cv2.imread(str(color_path))  # This will in BGR color space
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-            # Do initial object detection
+            # Do initial object detection (YOLO world)
             results = detection_model.predict(color_path,
                                               conf=0.1,
                                               verbose=False)
