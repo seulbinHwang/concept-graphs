@@ -83,6 +83,27 @@ def get_sam_segmentation_from_xyxy(sam_predictor: SamPredictor,
 
 def compute_clip_features(image, detections, clip_model, clip_preprocess,
                           clip_tokenizer, classes, device):
+    """
+
+
+    Args:
+        image:
+        detections:
+        clip_model:
+        clip_preprocess:
+        clip_tokenizer:
+        classes:
+        device:
+
+    Returns:
+
+    detections = sv.Detections(
+        xyxy=xyxy, # (N, 4)
+        confidence=conf, # (N, )
+        class_id=np.zeros_like(conf).astype(int),
+        mask=mask, # (N, H, W)
+    )
+    """
     backup_image = image.copy()
 
     image = Image.fromarray(image)

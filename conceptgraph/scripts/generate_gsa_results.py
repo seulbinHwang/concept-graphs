@@ -7,12 +7,13 @@ import os
 import argparse
 from pathlib import Path
 import re
-from typing import Any, List
+from typing import Any, List, Dict
 from PIL import Image
 import cv2
 import json
 import imageio
 import matplotlib
+import time
 
 matplotlib.use("TkAgg")
 from matplotlib import pyplot as plt
@@ -190,6 +191,10 @@ def get_sam_segmentation_from_xyxy(sam_predictor: SamPredictor,
 
 def get_sam_predictor(variant: str, device: str | int) -> SamPredictor:
     if variant == "sam":
+        """
+        SAM_ENCODER_VERSION: vit_b ( vit_h / vit_l / vit_b)
+            -
+        """
         sam = sam_model_registry[SAM_ENCODER_VERSION](
             checkpoint=SAM_CHECKPOINT_PATH)
         sam.to(device)
@@ -243,11 +248,12 @@ def get_sam_segmentation_dense(
         conf: (N,)
     '''
     if variant == "sam":
-        results = model.generate(image)
+        results: List[Dict[str, Any]] = model.generate(image)
         mask = []
         xyxy = []
         conf = []
         for r in results:
+            r: Dict[str, Any]
             mask.append(r["segmentation"])
             r_xyxy = r["bbox"].copy()
             # Convert from xyhw format to xyxy format
@@ -359,7 +365,8 @@ python -m conceptgraph.scripts.generate_gsa_results \
     --dataset_config $REPLICA_CONFIG_PATH \
     --scene_id $SCENE_NAME \
     --class_set none \
-    --stride 50
+    --stride 50 \
+    --save_video
     """
     """
         dataconfig: $REPLICA_CONFIG_PATH
@@ -479,6 +486,8 @@ python -m conceptgraph.scripts.generate_gsa_results \
         video_save_path = args.dataset_root / args.scene_id / f"gsa_vis_{save_name}.mp4"
         frames = []
 
+    average_period = 0.
+    total_data_number = len(dataset)
     for idx in trange(len(dataset)):
         ### Relevant paths and load image ###
         color_path = dataset.color_paths[idx]
@@ -558,19 +567,34 @@ python -m conceptgraph.scripts.generate_gsa_results \
         ### Detection and segmentation ###
         if args.class_set == "none":
             # Directly use SAM in dense sampling mode to get segmentation
+            start_time = time.time()
             mask, xyxy, conf = get_sam_segmentation_dense(
                 args.sam_variant, mask_generator, image_rgb)
+            elapsed_time = time.time() - start_time
+            average_period += elapsed_time
+            """ sv.Detections
+            이 클래스는 객체 탐지 모델의 출력 결과를 구조화된 방식으로 저장하여, 
+                후속 처리 및 분석을 용이하게 합니다.
+            """
             detections = sv.Detections(
-                xyxy=xyxy,
-                confidence=conf,
-                class_id=np.zeros_like(conf).astype(int),
-                mask=mask,
+                xyxy=xyxy, # (N, 4)
+                confidence=conf, # (N, )
+                class_id=np.zeros_like(conf).astype(int), # (N, )
+                mask=mask, # (N, H, W)
             )
+            """
+            image_crops: List[np.ndarray] # 길이 N
+            image_feats: np.ndarray (N, dim) 아마도?
+            text_feats: np.ndarray (N, dim) 아마도? ("item"에 대한 features)
+            """
+            start_time = time.time()
             image_crops, image_feats, text_feats = compute_clip_features(
                 image_rgb, detections, clip_model, clip_preprocess,
                 clip_tokenizer, classes, args.device)
-
+            elapsed_time2 = time.time() - start_time
+            average_period += elapsed_time2
             ### Visualize results ###
+            # labels: List[str] : [ "item 0.57" , ... ]
             annotated_image, labels = vis_result_fast(
                 image, detections, classes, instance_random_color=True)
 
@@ -681,7 +705,8 @@ python -m conceptgraph.scripts.generate_gsa_results \
         # Here we use gzip to compress the file, which could reduce the file size by 500x
         with gzip.open(detections_save_path, "wb") as f:
             pickle.dump(results, f)
-
+    average_period = average_period / total_data_number
+    print("average_period: ", average_period)
     # save global classes
     with open(
             args.dataset_root / args.scene_id / f"gsa_classes_{save_name}.json",
