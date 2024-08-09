@@ -252,7 +252,7 @@ def vis_result_fast_on_depth(
     )
     mask_annotator = sv.MaskAnnotator(
         color=color,
-        opacity=0.2,
+        # opacity=0.2,
     )
 
     if hasattr(detections, 'confidence') and hasattr(detections, 'class_id'):

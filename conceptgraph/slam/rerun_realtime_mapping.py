@@ -6,6 +6,7 @@ The script is used to model Grounded SAM detections in 3D, it assumes the tag2te
 import os
 import copy
 import uuid
+import time
 from pathlib import Path
 import pickle
 import gzip
@@ -62,9 +63,13 @@ from conceptgraph.slam.mapping import (compute_spatial_similarities,
 from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
 
+"""
+python -m conceptgraph.slam.rerun_realtime_mapping
+"""
+
 # Disable torch gradient computation
 torch.set_grad_enabled(False)
-
+RUN_OPEN_API = False
 
 # A logger for this file
 @hydra.main(version_base=None,
@@ -133,7 +138,9 @@ def main(cfg: DictConfig):
         skip_bg=detections_exp_cfg['skip_bg'])
 
     # if we need to do detections
+    print("det_exp_path:", det_exp_path)
     run_detections = check_run_detections(cfg.force_detection, det_exp_path)
+    print("run_detections:", run_detections)
     det_exp_pkl_path = get_det_out_path(det_exp_path)
     det_exp_vis_path = get_vis_out_path(det_exp_path)
 
@@ -146,7 +153,7 @@ def main(cfg: DictConfig):
         ## Initialize the detection models
         detection_model = measure_time(YOLO)('yolov8l-world.pt')
         sam_predictor = SAM(
-            'sam_l.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
+            'sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
         # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
         clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
             "ViT-H-14", "laion2b_s32b_b79k")
@@ -155,8 +162,10 @@ def main(cfg: DictConfig):
 
         # Set the classes for the detection model
         detection_model.set_classes(obj_classes.get_classes_arr())
-
-        openai_client = get_openai_client()
+        if RUN_OPEN_API:
+            openai_client = get_openai_client()
+        else:
+            openai_client = None
 
     else:
         print("\n".join(["NOT Running detections..."] * 10))
@@ -172,6 +181,8 @@ def main(cfg: DictConfig):
 
     exit_early_flag = False
     counter = 0
+    elapsed_time_avg = 0.
+
     for frame_idx in trange(len(dataset)):
         tracker.curr_frame_idx = frame_idx
         counter += 1
@@ -217,6 +228,7 @@ def main(cfg: DictConfig):
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
             # Do initial object detection (YOLO world)
+            start_time = time.time()
             results = detection_model.predict(color_path,
                                               conf=0.1,
                                               verbose=False)
@@ -242,7 +254,9 @@ def main(cfg: DictConfig):
             else:
                 masks_np = np.empty((0, *color_tensor.shape[:2]),
                                     dtype=np.float64)
-
+            elapsed_time = time.time() - start_time
+            elapsed_time_avg += elapsed_time
+            print("elapsed_time:", elapsed_time)
             # Create a detections object that we will save later
             curr_det = sv.Detections(
                 xyxy=xyxy_np,
@@ -252,6 +266,7 @@ def main(cfg: DictConfig):
             )
 
             # Make the edges
+            # TODO:
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
                 image, curr_det, obj_classes, detection_class_labels,
                 det_exp_vis_path, color_path, cfg.make_edges, openai_client)
@@ -310,6 +325,8 @@ def main(cfg: DictConfig):
                                        results)
         else:
             # Support current and old saving formats
+            print("color_path:", color_path)
+            print("color_path.stem:", color_path.stem)
             if os.path.exists(det_exp_pkl_path / color_path.stem):
                 raw_gobs = load_saved_detections(det_exp_pkl_path /
                                                  color_path.stem)
@@ -579,6 +596,8 @@ def main(cfg: DictConfig):
             "is_final_frame": is_final_frame,
         })
     # LOOP OVER -----------------------------------------------------
+    elapsed_time_avg = elapsed_time_avg / len(dataset)
+    print("elapsed_time_avg:", elapsed_time_avg)
 
     # Consolidate captions
     for object in objects:

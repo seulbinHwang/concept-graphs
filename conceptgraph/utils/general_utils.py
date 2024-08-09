@@ -4,6 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Tuple, List, Dict
 import pickle
 # from conceptgraph.utils.vis import annotate_for_vlm, filter_detections, plot_edges_from_vlm
 from conceptgraph.slam.slam_classes import MapObjectList
@@ -496,6 +497,7 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes,
     )
 
     edges = []
+    captions = []
     edge_image = None
     if make_edges_flag:
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
@@ -518,19 +520,19 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes,
 
         cv2.imwrite(str(vis_save_path_for_vlm), annotated_image_for_vlm)
         print(f"Line 313, vis_save_path_for_vlm: {vis_save_path_for_vlm}")
-
-        edges = get_obj_rel_from_image_gpt4v(openai_client,
-                                             vis_save_path_for_vlm, label_list)
-        captions = get_obj_captions_from_image_gpt4v(openai_client,
-                                                     vis_save_path_for_vlm,
-                                                     label_list)
-        edge_image = plot_edges_from_vlm(annotated_image_for_vlm,
-                                         edges,
-                                         filtered_detections,
-                                         obj_classes,
-                                         labels,
-                                         sorted_indices,
-                                         save_path=vis_save_path_for_vlm_edges)
+        if openai_client:
+            edges = get_obj_rel_from_image_gpt4v(openai_client,
+                                                 vis_save_path_for_vlm, label_list)
+            captions = get_obj_captions_from_image_gpt4v(openai_client,
+                                                         vis_save_path_for_vlm,
+                                                         label_list)
+            edge_image = plot_edges_from_vlm(annotated_image_for_vlm,
+                                             edges,
+                                             filtered_detections,
+                                             obj_classes,
+                                             labels,
+                                             sorted_indices,
+                                             save_path=vis_save_path_for_vlm_edges)
 
     return labels, edges, edge_image, captions
 
@@ -676,14 +678,19 @@ def load_saved_detections(base_path):
 
 class ObjectClasses:
     """
-    Manages object classes and their associated colors, allowing for exclusion of background classes.
+    Manages object classes and their associated colors,
+        allowing for exclusion of background classes.
 
-    This class facilitates the creation or loading of a color map from a specified file containing
-    class names. It also manages background classes based on configuration, allowing for their
-    inclusion or exclusion. Background classes are ["wall", "floor", "ceiling"] by default.
+    This class facilitates
+        the creation or loading of a color map
+            from a specified file containing class names.
+    It also manages background classes based on configuration, allowing for their
+    inclusion or exclusion.
+        Background classes are ["wall", "floor", "ceiling"] by default.
 
     Attributes:
-        classes_file_path (str): Path to the file containing class names, one per line.
+        classes_file_path (str):
+            Path to the file containing class names, one per line.
 
     Usage:
         obj_classes = ObjectClasses(classes_file_path, skip_bg=True)
@@ -697,7 +704,7 @@ class ObjectClasses:
         self.skip_bg = skip_bg
         self.classes, self.class_to_color = self._load_or_create_colors()
 
-    def _load_or_create_colors(self):
+    def _load_or_create_colors(self) -> Tuple[List[str], Dict[str, List[float]]]:
         with open(self.classes_file_path, "r") as f:
             all_classes = [cls.strip() for cls in f.readlines()]
 
@@ -727,9 +734,10 @@ class ObjectClasses:
 
         return classes, class_to_color
 
-    def get_classes_arr(self):
+    def get_classes_arr(self) -> List[str]:
         """
-        Returns the list of class names, excluding background classes if configured to do so.
+        Returns the list of class names,
+        excluding background classes if configured to do so.
         """
         return self.classes
 
