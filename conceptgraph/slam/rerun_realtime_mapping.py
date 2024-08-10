@@ -62,7 +62,6 @@ from conceptgraph.slam.mapping import (compute_spatial_similarities,
                                        merge_obj_matches)
 from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
-
 """
 python -m conceptgraph.slam.rerun_realtime_mapping
 """
@@ -70,6 +69,7 @@ python -m conceptgraph.slam.rerun_realtime_mapping
 # Disable torch gradient computation
 torch.set_grad_enabled(False)
 RUN_OPEN_API = False
+
 
 # A logger for this file
 @hydra.main(version_base=None,
@@ -377,6 +377,16 @@ def main(cfg: DictConfig):
 
         # this helps make sure things like pillows on couches are separate objects
         gobs['mask'] = mask_subtract_contained(gobs['xyxy'], gobs['mask'])
+        # print all shapes of detections_to_obj_pcd_and_bbox inputs
+        print(
+            "-----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------"
+        )
+        print("depth_array.shape:", depth_array.shape)
+        print("gobs['mask'][0].shape:", gobs['mask'][0].shape)
+        print("intrinsics.cpu().numpy()[:3, :3].shape:",
+              intrinsics.cpu().numpy()[:3, :3].shape)
+        print("image_rgb.shape:", image_rgb.shape)
+        print("adjusted_pose.shape:", adjusted_pose.shape)
 
         obj_pcds_and_bboxes = measure_time(detections_to_obj_pcd_and_bbox)(
             depth_array=depth_array,

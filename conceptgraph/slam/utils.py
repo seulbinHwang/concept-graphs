@@ -1351,6 +1351,53 @@ def detections_to_obj_pcd_and_bbox(depth_array,
                                    run_dbscan=None,
                                    device='cuda'):
     """
+위 함수는 3D 객체 감지 결과를 처리하여,
+    - 각 객체의 3D 포인트 클라우드(Point Cloud)와 경계 상자(Bounding Box)를 생성
+- 이 함수는 주어진 깊이 이미지, 객체 마스크, 그리고 카메라 내장행렬을 사용하여
+    - 각 객체의 3D 위치와 모양을 계산
+
+### 주요 역할과 기능:
+
+1. **입력 데이터 처리**:
+   - `depth_array`:
+   - `masks`: 각 객체에 대한 이진 마스크 배열로, 객체가 차지하는 픽셀을 1로 표시
+   - `cam_K`: 카메라의 내장행렬
+   - `image_rgb`: 선택적으로 RGB 이미지를 받아, 포인트 클라우드에 색상을 입힐 수 있음
+   - `trans_pose`: 선택적으로 입력된 변환 행렬로, 객체의 위치를 조정할 때 사용
+
+2. **텐서 변환 및 장치 할당**:
+   - 입력 데이터를 PyTorch 텐서로 변환하고, 지정된 장치(`cuda` 또는 `cpu`)로 이동시킵니다.
+
+3. **포인트 클라우드 생성**:
+   - `batch_mask_depth_to_points_colors` 함수를 호출하여,
+        - 마스크와 깊이 정보를 기반으로 3D 포인트 및 색상(선택 사항)을 계산
+   - 각 객체에 대해 3D 포인트와 색상을 추출한 후, 유효한 포인트만을 남깁니다.
+        - 유효한 포인트는 깊이 값이 0보다 큰 포인트
+
+4. **포인트 클라우드 다운샘플링**:
+   - `dynamic_downsample` 함수를 사용하여,
+        - 포인트 클라우드를 지정된 최대 포인트 수(`obj_pcd_max_points`)로 줄입니다.
+   - 이 과정에서 포인트 클라우드의 밀도를 낮추어 메모리 사용을 줄이고, 처리 속도를 높입니다.
+
+5. **포인트 클라우드 생성 및 변환**:
+   - Open3D의 `PointCloud` 객체를 생성하고, 계산된 3D 포인트와 색상을 할당
+   - `trans_pose`가 제공된 경우, 포인트 클라우드에 변환 행렬을 적용하여 객체의 위치를 조정
+
+6. **경계 상자(Bounding Box) 계산**:
+   - `get_bounding_box` 함수를 호출하여, 포인트 클라우드를 감싸는 경계 상자를 계산
+   - 이때, `spatial_sim_type`에 따라 경계 상자의 유형을 선택할 수 있습니다
+        - (예: axis-aligned, 즉 축 정렬된 상자).
+
+7. **결과 저장 및 반환**:
+   - 각 객체의 포인트 클라우드와 경계 상자를 `processed_objects` 리스트에 저장
+        - 포인트 클라우드가 유효하지 않거나, 경계 상자의 부피가 너무 작은 객체는 제외
+   - 최종적으로, 모든 처리된 객체의 리스트를 반환
+
+- **출력**:
+  - 각 객체에 대해 포인트 클라우드(`pcd`)와 경계 상자(`bbox`)가 포함된 딕셔너리 리스트를 반환
+
+    """
+    """
     This function processes a batch of objects to create colored point clouds, apply transformations, and compute bounding boxes.
 
     Args:
@@ -1378,9 +1425,18 @@ def detections_to_obj_pcd_and_bbox(depth_array,
             device).float() / 255.0  # Normalize RGB values
     else:
         image_rgb_tensor = None
-
+    # print all shape of the tensors of batch_mask_depth_to_points_colors input
+    print(
+        "------all shape of the tensors of batch_mask_depth_to_points_colors input------"
+    )
+    print("depth_tensor.shape: ", depth_tensor.shape)
+    print("masks_tensor.shape: ", masks_tensor.shape)
+    print("cam_K_tensor.shape: ", cam_K_tensor.shape)
+    print("image_rgb_tensor.shape: ", image_rgb_tensor.shape)
     points_tensor, colors_tensor = batch_mask_depth_to_points_colors(
         depth_tensor, masks_tensor, cam_K_tensor, image_rgb_tensor, device)
+    print("[output] points_tensor.shape: ", points_tensor.shape)
+    print("[output] colors_tensor.shape: ", colors_tensor.shape)
 
     processed_objects = [None] * N  # Initialize with placeholders
     for i in range(N):
@@ -1394,9 +1450,15 @@ def detections_to_obj_pcd_and_bbox(depth_array,
         valid_points = mask_points[valid_points_mask]
         valid_colors = mask_colors[
             valid_points_mask] if mask_colors is not None else None
-
+        # print all shape of the tensors of dynamic_downsample input
+        print(
+            "------all shape of the tensors of dynamic_downsample input------")
+        print("valid_points.shape: ", valid_points.shape)
+        print("valid_colors.shape: ", valid_colors.shape)
         downsampled_points, downsampled_colors = dynamic_downsample(
             valid_points, colors=valid_colors, target=obj_pcd_max_points)
+        print("[output] downsampled_points.shape: ", downsampled_points.shape)
+        print("[output] downsampled_colors.shape: ", downsampled_colors.shape)
 
         # Create point cloud
         pcd = o3d.geometry.PointCloud()
