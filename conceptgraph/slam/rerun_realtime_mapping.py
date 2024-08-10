@@ -278,13 +278,13 @@ def main(cfg: DictConfig):
             # Convert the detections to a dict. The elements are in np.array
             results = {
                 # add new uuid for each detection
-                "xyxy": curr_det.xyxy,
-                "confidence": curr_det.confidence,
-                "class_id": curr_det.class_id,
-                "mask": curr_det.mask,
+                "xyxy": curr_det.xyxy, # (34, 4)
+                "confidence": curr_det.confidence, # (34,)
+                "class_id": curr_det.class_id, # (34,)
+                "mask": curr_det.mask, # (34, 680, 1200)
                 "classes": obj_classes.get_classes_arr(),
                 "image_crops": image_crops,
-                "image_feats": image_feats,
+                "image_feats": image_feats, # (34, 1024)
                 "text_feats": text_feats,
                 "detection_class_labels": detection_class_labels,
                 "labels": labels,
@@ -302,6 +302,13 @@ def main(cfg: DictConfig):
                     if isinstance(value[0], np.ndarray):
                         print(
                             f"-----------all shapes of {key} inputs:--------\n{value[0].shape}"
+                        )
+                    else:
+                        print(
+                            f"-----------all shapes of {key} inputs:--------\n{len(value)}"
+                        )
+                        print(
+                            f"-----------all shapes of {key} inputs:--------\n{value[0]}"
                         )
                 else:
                     print(f"-----------all shapes of {key} inputs:--------\n{value}")
