@@ -1459,7 +1459,7 @@ def detections_to_obj_pcd_and_bbox(depth_array,
             valid_points, colors=valid_colors, target=obj_pcd_max_points)
         print("[output] downsampled_points.shape: ", downsampled_points.shape)
         print("[output] downsampled_colors.shape: ", downsampled_colors.shape)
-
+        raise ValueError("Stop here")
         # Create point cloud
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(
