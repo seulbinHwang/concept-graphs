@@ -7,7 +7,7 @@ from pathlib import Path
 from conceptgraph.utils.logging_metrics import DenoisingTracker, MappingTracker
 import cv2
 # from line_profiler import profile
-
+from typing import List, Union, Dict, Any, Tuple
 import numpy as np
 from omegaconf import DictConfig
 import omegaconf
@@ -1283,19 +1283,21 @@ def batch_mask_depth_to_points_colors(
         masks_tensor: torch.Tensor,
         cam_K: torch.Tensor,
         image_rgb_tensor: torch.Tensor = None,  # Parameter for RGB image tensor
-        device: str = 'cuda') -> tuple:
+        device: str = 'cuda') -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Converts a batch of masked depth images to 3D points and corresponding colors.
 
     Args:
-        depth_tensor (torch.Tensor): A tensor of shape (N, H, W) representing the depth images.
-        masks_tensor (torch.Tensor): A tensor of shape (N, H, W) representing the masks for each depth image.
-        cam_K (torch.Tensor): A tensor of shape (3, 3) representing the camera intrinsic matrix.
-        image_rgb_tensor (torch.Tensor, optional): A tensor of shape (N, H, W, 3) representing the RGB images. Defaults to None.
-        device (str, optional): The device to perform the computation on. Defaults to 'cuda'.
+        depth_tensor (torch.Tensor):  (H, W)
+        masks_tensor (torch.Tensor): (N, H, W)
+        cam_K (torch.Tensor): (3, 3)
+        image_rgb_tensor (torch.Tensor, optional): (H, W, 3)
+        device (str, optional):
 
     Returns:
-        tuple: A tuple containing the 3D points tensor of shape (N, H, W, 3) and the colors tensor of shape (N, H, W, 3).
+        tuple: A tuple containing
+            the 3D points (N, H, W, 3) and
+            the colors (N, H, W, 3).
     """
     N, H, W = masks_tensor.shape
     fx, fy, cx, cy = cam_K[0, 0], cam_K[1, 1], cam_K[0, 2], cam_K[1, 2]
@@ -1304,13 +1306,16 @@ def batch_mask_depth_to_points_colors(
     y, x = torch.meshgrid(torch.arange(0, H, device=device),
                           torch.arange(0, W, device=device),
                           indexing='ij')
+    # depth_tensor: (H,W) -> (N, H, W)
+    # masks_tensor: (N, H, W)
     z = depth_tensor.repeat(N, 1, 1) * masks_tensor  # Apply masks to depth
 
-    valid = (z > 0).float()  # Mask out zeros
+    valid = (z > 0).float()  # Mask out zeros # (N, H, W)
 
     x = (x - cx) * z / fx
     y = (y - cy) * z / fy
 
+    # points: (N, H, W, 3)
     points = torch.stack(
         (x, y, z), dim=-1) * valid.unsqueeze(-1)  # Shape: (N, H, W, 3)
 
@@ -1395,17 +1400,16 @@ def detections_to_obj_pcd_and_bbox(depth_array,
 
 - **출력**:
   - 각 객체에 대해 포인트 클라우드(`pcd`)와 경계 상자(`bbox`)가 포함된 딕셔너리 리스트를 반환
-
     """
     """
     This function processes a batch of objects to create colored point clouds, apply transformations, and compute bounding boxes.
 
     Args:
-        depth_array (numpy.ndarray): Array containing depth values.
-        masks (numpy.ndarray): Array containing binary masks for each object.
-        cam_K (numpy.ndarray): Camera intrinsic matrix.
-        image_rgb (numpy.ndarray, optional): RGB image. Defaults to None.
-        trans_pose (numpy.ndarray, optional): Transformation matrix. Defaults to None.
+        depth_array (numpy.ndarray): (680, 1200)
+        masks (numpy.ndarray): (680, 1200)
+        cam_K (numpy.ndarray): (3, 3)
+        image_rgb (numpy.ndarray, optional): (680, 1200, 3)
+        trans_pose (numpy.ndarray, optional): Transformation matrix. (4, 4)
         min_points_threshold (int, optional): Minimum number of points required for an object. Defaults to 5.
         spatial_sim_type (str, optional): Type of spatial similarity. Defaults to 'axis_aligned'.
         device (str, optional): Device to use. Defaults to 'cuda'.
@@ -1425,7 +1429,6 @@ def detections_to_obj_pcd_and_bbox(depth_array,
             device).float() / 255.0  # Normalize RGB values
     else:
         image_rgb_tensor = None
-    # print all shape of the tensors of batch_mask_depth_to_points_colors input
     """
 ------all shape of the tensors of batch_mask_depth_to_points_colors input------
 depth_tensor.shape:  torch.Size([680, 1200])
@@ -1440,14 +1443,18 @@ image_rgb_tensor.shape:  torch.Size([680, 1200, 3])
 
     processed_objects = [None] * N  # Initialize with placeholders
     for i in range(N):
-        mask_points = points_tensor[i]
+        mask_points = points_tensor[i] # (H, W, 3)
         mask_colors = colors_tensor[i] if colors_tensor is not None else None
 
         valid_points_mask = mask_points[:, :, 2] > 0
+        print("valid_points_mask.shape: ", valid_points_mask.shape)
+        # 5개 이상의 포인트가 없으면 -> 무시한다.
         if torch.sum(valid_points_mask) < min_points_threshold:
             continue
 
         valid_points = mask_points[valid_points_mask]
+        print("valid_points.shape: ", valid_points.shape)
+        raise NotImplementedError
         valid_colors = mask_colors[
             valid_points_mask] if mask_colors is not None else None
         """
