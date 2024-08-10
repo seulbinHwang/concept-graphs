@@ -303,7 +303,7 @@ def main(cfg: DictConfig):
                         print(
                             f"-----------all shapes of {key} inputs:--------\n{len(value)}"
                         )
-                    if isinstance(value[0], np.ndarray):
+                    elif isinstance(value[0], np.ndarray):
                         print(
                             f"-----------all shapes of {key} inputs:--------\n{value[0].shape}"
                         )
