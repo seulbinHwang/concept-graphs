@@ -1426,17 +1426,17 @@ def detections_to_obj_pcd_and_bbox(depth_array,
     else:
         image_rgb_tensor = None
     # print all shape of the tensors of batch_mask_depth_to_points_colors input
-    print(
-        "------all shape of the tensors of batch_mask_depth_to_points_colors input------"
-    )
-    print("depth_tensor.shape: ", depth_tensor.shape)
-    print("masks_tensor.shape: ", masks_tensor.shape)
-    print("cam_K_tensor.shape: ", cam_K_tensor.shape)
-    print("image_rgb_tensor.shape: ", image_rgb_tensor.shape)
+    """
+------all shape of the tensors of batch_mask_depth_to_points_colors input------
+depth_tensor.shape:  torch.Size([680, 1200])
+masks_tensor.shape:  torch.Size([23, 680, 1200])
+cam_K_tensor.shape:  torch.Size([3, 3])
+image_rgb_tensor.shape:  torch.Size([680, 1200, 3])
+[output] points_tensor.shape:  torch.Size([23, 680, 1200, 3])
+[output] colors_tensor.shape:  torch.Size([23, 680, 1200, 3])
+    """
     points_tensor, colors_tensor = batch_mask_depth_to_points_colors(
         depth_tensor, masks_tensor, cam_K_tensor, image_rgb_tensor, device)
-    print("[output] points_tensor.shape: ", points_tensor.shape)
-    print("[output] colors_tensor.shape: ", colors_tensor.shape)
 
     processed_objects = [None] * N  # Initialize with placeholders
     for i in range(N):
@@ -1450,16 +1450,15 @@ def detections_to_obj_pcd_and_bbox(depth_array,
         valid_points = mask_points[valid_points_mask]
         valid_colors = mask_colors[
             valid_points_mask] if mask_colors is not None else None
-        # print all shape of the tensors of dynamic_downsample input
-        print(
-            "------all shape of the tensors of dynamic_downsample input------")
-        print("valid_points.shape: ", valid_points.shape)
-        print("valid_colors.shape: ", valid_colors.shape)
+        """
+------all shape of the tensors of dynamic_downsample input------
+valid_points.shape:  torch.Size([27633, 3])
+valid_colors.shape:  torch.Size([27633, 3])
+[output] downsampled_points.shape:  torch.Size([5527, 3])
+[output] downsampled_colors.shape:  torch.Size([5527, 3])
+        """
         downsampled_points, downsampled_colors = dynamic_downsample(
             valid_points, colors=valid_colors, target=obj_pcd_max_points)
-        print("[output] downsampled_points.shape: ", downsampled_points.shape)
-        print("[output] downsampled_colors.shape: ", downsampled_colors.shape)
-        raise ValueError("Stop here")
         # Create point cloud
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(

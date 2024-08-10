@@ -378,15 +378,16 @@ def main(cfg: DictConfig):
         # this helps make sure things like pillows on couches are separate objects
         gobs['mask'] = mask_subtract_contained(gobs['xyxy'], gobs['mask'])
         # print all shapes of detections_to_obj_pcd_and_bbox inputs
-        print(
-            "-----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------"
-        )
-        print("depth_array.shape:", depth_array.shape)
-        print("gobs['mask'][0].shape:", gobs['mask'][0].shape)
-        print("intrinsics.cpu().numpy()[:3, :3].shape:",
-              intrinsics.cpu().numpy()[:3, :3].shape)
-        print("image_rgb.shape:", image_rgb.shape)
-        print("adjusted_pose.shape:", adjusted_pose.shape)
+        """
+-----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------
+depth_array.shape: (680, 1200)
+gobs['mask'][0].shape: (680, 1200)
+intrinsics.cpu().numpy()[:3, :3].shape: (3, 3)
+image_rgb.shape: (680, 1200, 3)
+adjusted_pose.shape: (4, 4)
+
+
+        """
 
         obj_pcds_and_bboxes = measure_time(detections_to_obj_pcd_and_bbox)(
             depth_array=depth_array,
