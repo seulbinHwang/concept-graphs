@@ -299,6 +299,10 @@ def main(cfg: DictConfig):
                         f"-----------all shapes of {key} inputs:--------\n{value.shape}"
                     )
                 elif isinstance(value, list):
+                    if len(value) == 0:
+                        print(
+                            f"-----------all shapes of {key} inputs:--------\n{len(value)}"
+                        )
                     if isinstance(value[0], np.ndarray):
                         print(
                             f"-----------all shapes of {key} inputs:--------\n{value[0].shape}"
