@@ -7,6 +7,31 @@ import numpy as np
 
 
 class OptionalReRun:
+    """
+`OptionalReRun` 클래스는 "Rerun"이라는 로깅 라이브러리를 선택적으로 사용하는 싱글톤 패턴 클래스
+이 클래스는 주어진 조건에 따라 Rerun을 사용해 다양한 데이터를 로깅
+만약 Rerun이 설치되어 있지 않거나,
+    설정에서 Rerun 사용이 비활성화되어 있으면, 해당 기능의 호출을 무시
+
+### 주요 기능과 역할:
+
+1. **싱글톤 패턴 (`__new__` 메서드)**:
+   - `OptionalReRun` 클래스는 싱글톤 패턴을 사용하여 단 하나의 인스턴스만 생성되도록
+   - `_instance` 클래스 변수를 통해 인스턴스가 이미 존재하는지 확인하고,
+        존재하지 않을 경우에만 새로운 인스턴스를 생성
+
+2. **Rerun 사용 설정 (`set_use_rerun` 메서드)**:
+   - `set_use_rerun` 메서드는 Rerun 사용 여부를 설정
+   - 설정에 따라 Rerun 을 사용하려는 경우, Rerun 모듈을 임포트하고 `_rerun` 속성에 할당
+   - 만약 Rerun이 설치되어 있지 않거나 설정에서 비활성화된 경우, Rerun 기능을 사용하지 않습니다.
+
+3. **동적 메서드 호출 (`__getattr__` 메서드)**:
+   - `__getattr__` 메서드는 클래스에 존재하지 않는 속성이나 메서드에 접근할 때 호출
+   - 여기서는 Rerun의 메서드 호출을 동적으로 처리합니다.
+   - Rerun 사용이 설정되어 있고 Rerun 모듈이 성공적으로 임포트된 경우, 해당 Rerun 메서드를 호출
+   - 그렇지 않은 경우, Rerun 메서드 호출을 무시합니다.
+
+    """
     _instance = None
 
     def __new__(cls):
@@ -61,6 +86,23 @@ counter = 0
 
 def orr_log_camera(intrinsics, adjusted_pose, prev_adjusted_pose, img_width,
                    img_height, frame_idx):
+    """
+
+    Args:
+        intrinsics:
+        adjusted_pose:
+        prev_adjusted_pose:
+        img_width:
+        img_height:
+        frame_idx:
+
+    Returns:
+
+카메라의 내재적(intrinsic) 및 외재적(extrinsic) 파라미터를 로깅하는 역할
+특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
+    "이전 프레임의 카메라 위치"와 "현재 프레임의 카메라 위치"를 연결하는 경로를 시각적으로 나타냄
+
+    """
     # Extract intrinsic camera parameters
     focal_length = [intrinsics[0, 0].item(), intrinsics[1, 1].item()]
     principal_point = [intrinsics[0, 2].item(), intrinsics[1, 2].item()]

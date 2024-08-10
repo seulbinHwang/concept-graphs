@@ -1043,7 +1043,7 @@ def filter_gobs(
     return gobs
 
 
-def resize_gobs(gobs, image):
+def resize_gobs(gobs:Dict[str, Any], image):
 
     # If the shapes are the same, no resizing is necessary
     if gobs['mask'].shape[1:] == image.shape[:2]:

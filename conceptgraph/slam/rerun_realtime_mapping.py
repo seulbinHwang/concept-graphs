@@ -181,7 +181,6 @@ def main(cfg: DictConfig):
 
     exit_early_flag = False
     counter = 0
-    elapsed_time_avg = 0.
 
     for frame_idx in trange(len(dataset)):
         tracker.curr_frame_idx = frame_idx
@@ -212,7 +211,7 @@ def main(cfg: DictConfig):
         assert image_rgb.max() > 1, "Image is not in range [0, 255]"
 
         # Load image detections for the current frame
-        raw_gobs = None
+        raw_grounded_obs = None
         gobs = None  # stands for grounded observations
         detections_path = det_exp_pkl_path / (color_path.stem + ".pkl.gz")
 
@@ -229,6 +228,7 @@ def main(cfg: DictConfig):
 
             # Do initial object detection (YOLO world)
             start_time = time.time()
+            # important
             results = detection_model.predict(color_path,
                                               conf=0.1,
                                               verbose=False)
@@ -254,9 +254,6 @@ def main(cfg: DictConfig):
             else:
                 masks_np = np.empty((0, *color_tensor.shape[:2]),
                                     dtype=np.float64)
-            elapsed_time = time.time() - start_time
-            elapsed_time_avg += elapsed_time
-            print("elapsed_time:", elapsed_time)
             # Create a detections object that we will save later
             curr_det = sv.Detections(
                 xyxy=xyxy_np,
@@ -264,9 +261,8 @@ def main(cfg: DictConfig):
                 class_id=detection_class_ids,
                 mask=masks_np,
             )
-
+            # important finish
             # Make the edges
-            # TODO:
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
                 image, curr_det, obj_classes, detection_class_labels,
                 det_exp_vis_path, color_path, cfg.make_edges, openai_client)
@@ -295,10 +291,27 @@ def main(cfg: DictConfig):
                 "edges": edges,
                 "captions": captions,
             }
+            # print all shapes of value of results iteratively
+            for key, value in results.items():
+                print(f"-----------all shapes of {key} inputs:--------")
+                if isinstance(value, np.ndarray):
+                    print(
+                        f"-----------all shapes of {key} inputs:--------\n{value.shape}"
+                    )
+                elif isinstance(value, list):
+                    if isinstance(value[0], np.ndarray):
+                        print(
+                            f"-----------all shapes of {key} inputs:--------\n{value[0].shape}"
+                        )
+                else:
+                    print(f"-----------all shapes of {key} inputs:--------\n{value}")
+            raise ValueError("Stop here")
 
-            raw_gobs = results
+
+            raw_grounded_obs = results
 
             # save the detections if needed
+            # important
             if cfg.save_detections:
 
                 vis_save_path = (det_exp_vis_path /
@@ -323,16 +336,17 @@ def main(cfg: DictConfig):
                     depth_image_rgb)
                 save_detection_results(det_exp_pkl_path / vis_save_path.stem,
                                        results)
+            # important finish
         else:
             # Support current and old saving formats
             print("color_path:", color_path)
             print("color_path.stem:", color_path.stem)
             if os.path.exists(det_exp_pkl_path / color_path.stem):
-                raw_gobs = load_saved_detections(det_exp_pkl_path /
+                raw_grounded_obs = load_saved_detections(det_exp_pkl_path /
                                                  color_path.stem)
             elif os.path.exists(det_exp_pkl_path /
                                 f"{int(color_path.stem):06}"):
-                raw_gobs = load_saved_detections(det_exp_pkl_path /
+                raw_grounded_obs = load_saved_detections(det_exp_pkl_path /
                                                  f"{int(color_path.stem):06}")
             else:
                 # if no detections, throw an error
@@ -346,7 +360,7 @@ def main(cfg: DictConfig):
 
         # Don't apply any transformation otherwise
         adjusted_pose = unt_pose
-
+        # orr = Optional re-run
         prev_adjusted_pose = orr_log_camera(intrinsics, adjusted_pose,
                                             prev_adjusted_pose, cfg.image_width,
                                             cfg.image_height, frame_idx)
@@ -358,7 +372,7 @@ def main(cfg: DictConfig):
         orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
 
         # resize the observation if needed
-        resized_gobs = resize_gobs(raw_gobs, image_rgb)
+        resized_gobs = resize_gobs(raw_grounded_obs, image_rgb)
         # filter the observations
         filtered_gobs = filter_gobs(
             resized_gobs,
@@ -609,8 +623,7 @@ adjusted_pose.shape: (4, 4)
             "is_final_frame": is_final_frame,
         })
     # LOOP OVER -----------------------------------------------------
-    elapsed_time_avg = elapsed_time_avg / len(dataset)
-    print("elapsed_time_avg:", elapsed_time_avg)
+
 
     # Consolidate captions
     for object in objects:
