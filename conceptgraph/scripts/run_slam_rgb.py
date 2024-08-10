@@ -147,10 +147,10 @@ scene_id : $SCENE_NAME
         _pose = torch.from_numpy(pose_np).to(_pose.device).to(_pose.dtype)
 
         frame_cur = RGBDImages(
-            _color.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 3)
-            _depth.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 1)
-            intrinsics.unsqueeze(0).unsqueeze(0),  # (1, 1, 4, 4)
-            _pose.unsqueeze(0).unsqueeze(0),  # (1, 1, 4, 4)
+            rgb_image=_color.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 3)
+            depth_image=_depth.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 1)
+            intrinsics=intrinsics.unsqueeze(0).unsqueeze(0),  # (1, 1, 4, 4)
+            poses=_pose.unsqueeze(0).unsqueeze(0),  # (1, 1, 4, 4)
             embeddings=_embedding,  # None
             confidence_image=_confidence,  # None
         )
