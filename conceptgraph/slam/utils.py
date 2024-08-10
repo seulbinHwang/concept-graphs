@@ -211,6 +211,31 @@ def pcd_denoise_dbscan(pcd: o3d.geometry.PointCloud,
 def init_pcd_denoise_dbscan(pcd: o3d.geometry.PointCloud,
                             eps=0.02,
                             min_points=10) -> o3d.geometry.PointCloud:
+    """
+### 2. `init_pcd_denoise_dbscan` 함수
+#### 역할:
+- 이 함수는 DBSCAN 클러스터링 알고리즘을 사용하여 포인트 클라우드를 클러스터로 분리하고,
+    가장 큰 클러스터만 남겨서 노이즈를 제거하는 역할
+
+#### 주요 작업:
+1. **DBSCAN 클러스터링 (`cluster_dbscan`)**:
+   - `pcd.cluster_dbscan(eps=eps, min_points=min_points)`는 포인트 클라우드를 클러스터로 나누는 작업을 수행합니다. `eps`는 두 포인트 간의 최대 거리, `min_points`는 하나의 클러스터로 간주하기 위한 최소 포인트 수입니다.
+   - 이 작업은 포인트들을 유사한 공간적 위치에 따라 그룹화하며, 밀집되지 않은 포인트들은 노이즈로 간주합니다.
+
+2. **클러스터의 라벨링**:
+   - `pcd_clusters`는 각 포인트가 속한 클러스터의 라벨을 포함하는 배열입니다. 라벨 `-1`은 노이즈로 간주되는 포인트를 나타냅니다.
+
+3. **가장 큰 클러스터 선택**:
+   - `Counter(pcd_clusters)`를 사용해 클러스터의 라벨을 세고, 가장 큰 클러스터의 라벨을 찾습니다.
+   - 가장 큰 클러스터에 속한 포인트들만 선택하여 새로운 포인트 클라우드를 생성합니다.
+
+4. **노이즈 제거**:
+   - 만약 가장 큰 클러스터의 포인트 수가 너무 작으면(기본적으로 5개 미만), 노이즈 제거 작업을 취소하고 원래의 포인트 클라우드를 반환합니다.
+
+5. **새로운 포인트 클라우드 생성**:
+   - 선택된 포인트들로 새로운 `PointCloud` 객체를 생성하여 반환합니다. 이 포인트 클라우드는 노이즈가 제거된, 더 정제된 형태입니다.
+
+    """
     ## Remove noise via clustering
     pcd_clusters = pcd.cluster_dbscan(  # inint
         eps=eps,
@@ -257,11 +282,34 @@ def init_pcd_denoise_dbscan(pcd: o3d.geometry.PointCloud,
 
 
 def init_process_pcd(pcd,
-                     downsample_voxel_size,
+                     downsample_voxel_size, # 0.01
                      dbscan_remove_noise,
                      dbscan_eps,
                      dbscan_min_points,
                      run_dbscan=True):
+    """
+이 함수는 주어진 포인트 클라우드(pcd)를 다운샘플링하고,
+필요시 노이즈 제거를 수행하여 정제된 포인트 클라우드를 반환
+    Args:
+        pcd:
+        downsample_voxel_size:
+        dbscan_remove_noise:
+        dbscan_eps:
+        dbscan_min_points:
+        run_dbscan:
+
+    Returns:
+
+
+voxel_down_sample(voxel_size=downsample_voxel_size)
+    포인트 클라우드를 지정된 voxel 크기에 따라 다운샘플링하여, 포인트의 수를 줄이는 과정
+    이 과정은 포인트 클라우드를 간략화하고, 메모리 사용량을 줄이는 데 도움을 줍니다.
+    downsample_voxel_size # meter scale
+
+init_pcd_denoise_dbscan 함수를 호출하여 DBSCAN 클러스터링을 이용해 노이즈를 제거
+    이 작업은 포인트 클라우드에서 가장 큰 클러스터만 남기고,
+    작은 클러스터(노이즈로 간주)를 제거하는 역할
+    """
     pcd = pcd.voxel_down_sample(voxel_size=downsample_voxel_size)
 
     if dbscan_remove_noise and run_dbscan:
@@ -291,7 +339,7 @@ def process_pcd(pcd,
 
 
 # @profile
-def get_bounding_box(spatial_sim_type, pcd):
+def get_bounding_box(spatial_sim_type: str, pcd: o3d.geometry.PointCloud) -> Union[o3d.geometry.OrientedBoundingBox, o3d.geometry.AxisAlignedBoundingBox]:
     if ("accurate" in spatial_sim_type or
             "overlap" in spatial_sim_type) and len(pcd.points) >= 4:
         try:
@@ -379,6 +427,10 @@ def merge_obj2_into_obj1(obj1,
 
     # Update 'bbox'
     obj1['bbox'] = get_bounding_box(spatial_sim_type, obj1['pcd'])
+    """
+[0, 1, 0]은 RGB 색상에서 녹색을 나타내는 값입니다. 
+각각의 값은 R(빨강), G(초록), B(파랑) 채널의 강도를 의미하며, 0에서 1 사이의 값을 가집니다.
+    """
     obj1['bbox'].color = [0, 1, 0]
 
     # Merge and normalize 'clip_ft'
@@ -1171,9 +1223,62 @@ def transform_detection_list(
 # @profile
 def make_detection_list_from_pcd_and_gobs(obj_pcds_and_bboxes, gobs, color_path,
                                           obj_classes, image_idx):
+    """
+3D 포인트 클라우드와 Grounded Observations (gobs)을 사용하여
+    객체 감지 리스트를 생성하는 역할을 합니다.
+이 함수는 특정 이미지 프레임에서 감지된 객체들의 정보를 효율적으로 관리할 수 있는 구조로 변환하여,
+    후속 처리 단계에서 사용할 수 있도록 합니다.
+
+### 주요 기능과 역할:
+
+1. **입력 데이터**:
+   - `obj_pcds_and_bboxes`:
+        각 객체의 3D Point Cloud와 경계 상자(Bounding Box) 정보를 포함하는 리스트입니다.
+        이 리스트는 이전 단계에서 계산된 객체의 3D 정보를 포함하고 있습니다.
+   - `gobs`:
+    Grounded SAM 감지 결과를 포함하는 데이터 구조로,
+        객체의 마스크, 클래스, 캡션
+   - `color_path`: 현재 프레임의 RGB 이미지 경로
+   - `obj_classes`: 객체 클래스 정보를 포함한 구조로, 객체의 클래스 이름과 클래스 ID를 관리
+   - `image_idx`: 현재 이미지 프레임의 인덱스
+
+2. **DetectionList 생성**:
+   - `DetectionList`는 감지된 객체의 정보를 저장하는 리스트 구조
+   - 각 객체는 딕셔너리 형태로 리스트에 추가되며, 이후 객체 간의 매칭, 병합, 추적 등의 작업에서 사용
+
+3. **객체 정보 추출 및 저장**:
+   - 함수는 `gobs`에서 각 객체에 대한 정보를 추출하고, 이를 `DetectionList`에 추가합니다.
+   - 여기에는 객체의 클래스 이름, 마스크, 포인트 클라우드, 경계 상자, 신뢰도, 캡션, 3D 정보 등이 포함
+   - 각 객체는 고유의 `UUID`를 생성하여 식별
+
+4. **객체의 배경 여부 확인**:
+   - 객체가 배경 클래스(`bg_classes`)에 속하는지 확인하여,
+        배경 객체인지 여부를 `is_background` 필드에 저장합니다.
+   - 배경 객체로 판단되면, 그 객체에 대해 별도의 처리를 할 수 있습니다.
+
+5. **추적기 업데이트**:
+   - `tracker` 객체는 각 클래스에 속하는 객체의 수를 추적하며, 전체 객체 수와 새로운 객체 수를 관리
+   - 각 객체가 추가될 때마다
+        해당 클래스의 객체 수(`curr_class_count`)와 전체 객체 수(`total_object_count`),
+        새로운 객체 수(`brand_new_counter`)가 증가합니다.
+
+6. **최종 결과 반환**:
+   - 생성된 `detection_list`는 각 객체의 상세 정보를 포함한 리스트로 반환됩니다.
+        - 이 리스트는 이후 객체 매칭, 병합, 시각화 등 다양한 작업에서 사용될 수 있습니다.
+    Args:
+        obj_pcds_and_bboxes:
+        gobs:
+        color_path:
+        obj_classes:
+        image_idx:
+
+    Returns:
+
+    """
     '''
-    This function makes a detection list for the objects
-    Ideally I don't want it to be needed, the detection list has too much info and is inefficient
+이 함수는 객체들을 위한 감지 리스트를 만듭니다.
+이 감지 리스트가 필요하지 않기를 바랍니다.
+ 이유: 감지 리스트에는 너무 많은 정보가 포함되어 있어 비효율적입니다.
     '''
     global tracker
     detection_list = DetectionList()
@@ -1239,21 +1344,25 @@ def make_detection_list_from_pcd_and_gobs(obj_pcds_and_bboxes, gobs, color_path,
 # @profile
 def dynamic_downsample(points, colors=None, target=5000):
     """
-    Simplified and configurable downsampling function that dynamically adjusts the 
-    downsampling rate based on the number of input points. If a target of -1 is provided, 
-    downsampling is bypassed, returning the original points and colors.
+    - 포인트 클라우드를 지정된 최대 포인트 수(`obj_pcd_max_points`)로 줄입니다.
+   - 이 과정에서 포인트 클라우드의 밀도를 낮추어 메모리 사용을 줄이고, 처리 속도를 높입니다.
+    Simplified and configurable downsampling function that dynamically adjusts
+        the downsampling rate based on the number of input points.
+    If a target of -1 is provided, downsampling is bypassed,
+        returning the original points and colors.
 
     Args:
-        points (torch.Tensor): Tensor of shape (N, 3) for N points.
+        points (torch.Tensor): (N, 3) for N points.
+        colors (torch.Tensor, optional): (N, 3).
+                                         Defaults to None.
         target (int): Target number of points to aim for in the downsampled output, 
                       or -1 to bypass downsampling.
-        colors (torch.Tensor, optional): Corresponding colors tensor of shape (N, 3). 
-                                         Defaults to None.
 
     Returns:
-        Tuple[torch.Tensor, Optional[torch.Tensor]]: Downsampled points and optionally 
-                                                     downsampled colors, or the original 
-                                                     points and colors if target is -1.
+        Tuple[torch.Tensor, Optional[torch.Tensor]]: 
+            Downsampled points (K, 3) and 
+            optionally downsampled colors, (K, 3)
+            or the original points and colors if target is -1.
     """
     # Check if downsampling is bypassed
     if target == -1:
@@ -1354,7 +1463,7 @@ def detections_to_obj_pcd_and_bbox(depth_array,
                                    dbscan_eps=None,
                                    dbscan_min_points=None,
                                    run_dbscan=None,
-                                   device='cuda'):
+                                   device='cuda') -> List[Dict[str, Any]]:
     """
 위 함수는 3D 객체 감지 결과를 처리하여,
     - 각 객체의 3D 포인트 클라우드(Point Cloud)와 경계 상자(Bounding Box)를 생성
@@ -1446,21 +1555,20 @@ image_rgb_tensor.shape:  torch.Size([680, 1200, 3])
         mask_points = points_tensor[i] # (H, W, 3)
         mask_colors = colors_tensor[i] if colors_tensor is not None else None
 
-        valid_points_mask = mask_points[:, :, 2] > 0
+        valid_points_mask = mask_points[:, :, 2] > 0 # (H, W)
         print("valid_points_mask.shape: ", valid_points_mask.shape)
         # 5개 이상의 포인트가 없으면 -> 무시한다.
         if torch.sum(valid_points_mask) < min_points_threshold:
             continue
 
-        valid_points = mask_points[valid_points_mask]
-        print("valid_points.shape: ", valid_points.shape)
-        raise NotImplementedError
+        valid_points = mask_points[valid_points_mask] # (27633, 3)
         valid_colors = mask_colors[
             valid_points_mask] if mask_colors is not None else None
         """
 ------all shape of the tensors of dynamic_downsample input------
 valid_points.shape:  torch.Size([27633, 3])
 valid_colors.shape:  torch.Size([27633, 3])
+obj_pcd_max_points = 5000
 [output] downsampled_points.shape:  torch.Size([5527, 3])
 [output] downsampled_colors.shape:  torch.Size([5527, 3])
         """
@@ -1469,11 +1577,11 @@ valid_colors.shape:  torch.Size([27633, 3])
         # Create point cloud
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(
-            downsampled_points.cpu().numpy())
+            downsampled_points.cpu().numpy()) # (5527, 3)
         if downsampled_colors is not None:
             pcd.colors = o3d.utility.Vector3dVector(
-                downsampled_colors.cpu().numpy())
-
+                downsampled_colors.cpu().numpy()) # (5527, 3)
+        # trans_pose: (4,4)
         if trans_pose is not None:
             pcd.transform(
                 trans_pose)  # Apply transformation directly to the point cloud

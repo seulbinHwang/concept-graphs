@@ -377,7 +377,7 @@ def main(cfg: DictConfig):
 
         # this helps make sure things like pillows on couches are separate objects
         gobs['mask'] = mask_subtract_contained(gobs['xyxy'], gobs['mask'])
-        # print all shapes of detections_to_obj_pcd_and_bbox inputs
+        # TODO
         """
 -----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------
 depth_array.shape: (680, 1200)
@@ -393,14 +393,18 @@ adjusted_pose.shape: (4, 4)
             cam_K=intrinsics.cpu().numpy()[:3, :3],  # Camera intrinsics
             image_rgb=image_rgb,
             trans_pose=adjusted_pose,
-            min_points_threshold=cfg.min_points_threshold,
-            spatial_sim_type=cfg.spatial_sim_type,
-            obj_pcd_max_points=cfg.obj_pcd_max_points,
+            min_points_threshold=cfg.min_points_threshold, # 16
+            spatial_sim_type=cfg.spatial_sim_type, # overlap
+            obj_pcd_max_points=cfg.obj_pcd_max_points, # 5000
             device=cfg.device,
         )
 
         for obj in obj_pcds_and_bboxes:
             if obj:
+                """
+                포인트 클라우드를 처리하고, 
+                노이즈를 제거하여 클러스터링을 통해 중요한 포인트만 남기는 것
+                """
                 obj["pcd"] = init_process_pcd(
                     pcd=obj["pcd"],
                     downsample_voxel_size=cfg["downsample_voxel_size"],
