@@ -96,11 +96,11 @@ def main(cfg: DictConfig):
     # Initialize the dataset
     dataset = get_dataset(
         dataconfig=cfg.dataset_config,
+        basedir=cfg.dataset_root,
+        sequence=cfg.scene_id,
         start=cfg.start,
         end=cfg.end,
         stride=cfg.stride,
-        basedir=cfg.dataset_root,
-        sequence=cfg.scene_id,
         desired_height=cfg.image_height,
         desired_width=cfg.image_width,
         device="cpu",
@@ -204,7 +204,7 @@ def main(cfg: DictConfig):
         color_tensor, depth_tensor, intrinsics, *_ = dataset[frame_idx]
 
         # Covert to numpy and do some sanity checks
-        depth_tensor = depth_tensor[..., 0]
+        depth_tensor = depth_tensor[..., 0] # (H, W)
         depth_array = depth_tensor.cpu().numpy()
         color_np = color_tensor.cpu().numpy()  # (H, W, 3)
         image_rgb = (color_np).astype(np.uint8)  # (H, W, 3)
@@ -212,7 +212,7 @@ def main(cfg: DictConfig):
 
         # Load image detections for the current frame
         raw_grounded_obs = None
-        gobs = None  # stands for grounded observations
+        grounded_obs = None  # stands for grounded observations
         detections_path = det_exp_pkl_path / (color_path.stem + ".pkl.gz")
 
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
@@ -224,11 +224,11 @@ def main(cfg: DictConfig):
             results = None
             # opencv can't read Path objects...
             image = cv2.imread(str(color_path))  # This will in BGR color space
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # (H, W, 3)
 
             # Do initial object detection (YOLO world)
             start_time = time.time()
-            # important
+            # [1] detection
             results = detection_model.predict(color_path,
                                               conf=0.1,
                                               verbose=False)
@@ -245,6 +245,7 @@ def main(cfg: DictConfig):
             # Get Masks Using SAM or MobileSAM
             # UltraLytics SAM
             if xyxy_tensor.numel() != 0:
+                # segmentation
                 sam_out = sam_predictor.predict(color_path,
                                                 bboxes=xyxy_tensor,
                                                 verbose=False)
@@ -278,47 +279,21 @@ def main(cfg: DictConfig):
             # Convert the detections to a dict. The elements are in np.array
             results = {
                 # add new uuid for each detection
-                "xyxy": curr_det.xyxy, # (34, 4)
-                "confidence": curr_det.confidence, # (34,)
-                "class_id": curr_det.class_id, # (34,)
-                "mask": curr_det.mask, # (34, 680, 1200)
-                "classes": obj_classes.get_classes_arr(),
-                "image_crops": image_crops,
-                "image_feats": image_feats, # (34, 1024)
-                "text_feats": text_feats,
-                "detection_class_labels": detection_class_labels,
-                "labels": labels,
-                "edges": edges,
-                "captions": captions,
+                "xyxy": curr_det.xyxy,  # (34, 4)
+                "confidence": curr_det.confidence,  # (34,)
+                "class_id": curr_det.class_id,  # (34,)
+                "mask": curr_det.mask,  # (34, 680, 1200)
+                "classes":
+                    obj_classes.get_classes_arr(),  # len = 200, "alarm clock"
+                "image_crops": image_crops,  # len = 34, <PIL.Image.Image>
+                "image_feats": image_feats,  # (34, 1024)
+                "text_feats": text_feats,  # len = 0 # 아마?
+                "detection_class_labels":
+                    detection_class_labels,  # len = 34, "sofa chair 0"
+                "labels": labels,  # len = 19, "sofa chair 0"
+                "edges": edges,  # len = 0
+                "captions": captions,  # len = 0
             }
-            # print all shapes of value of results iteratively
-            for key, value in results.items():
-                print(f"-----------all shapes of {key} inputs:--------")
-                if isinstance(value, np.ndarray):
-                    print(
-                        f"-----------all shapes of {key} inputs:--------\n{value.shape}"
-                    )
-                elif isinstance(value, list):
-                    if len(value) == 0:
-                        print(
-                            f"-----------all shapes of {key} inputs:--------\n{len(value)}"
-                        )
-                    elif isinstance(value[0], np.ndarray):
-                        print(
-                            f"-----------all shapes of {key} inputs:--------\n{value[0].shape}"
-                        )
-                    else:
-                        print(
-                            f"-----------all shapes of {key} inputs:--------\n{len(value)}"
-                        )
-                        print(
-                            f"-----------all shapes of {key} inputs:--------\n{value[0]}"
-                        )
-                else:
-                    print(f"-----------all shapes of {key} inputs:--------\n{value}")
-            raise ValueError("Stop here")
-
-
             raw_grounded_obs = results
 
             # save the detections if needed
@@ -354,11 +329,11 @@ def main(cfg: DictConfig):
             print("color_path.stem:", color_path.stem)
             if os.path.exists(det_exp_pkl_path / color_path.stem):
                 raw_grounded_obs = load_saved_detections(det_exp_pkl_path /
-                                                 color_path.stem)
+                                                         color_path.stem)
             elif os.path.exists(det_exp_pkl_path /
                                 f"{int(color_path.stem):06}"):
-                raw_grounded_obs = load_saved_detections(det_exp_pkl_path /
-                                                 f"{int(color_path.stem):06}")
+                raw_grounded_obs = load_saved_detections(
+                    det_exp_pkl_path / f"{int(color_path.stem):06}")
             else:
                 # if no detections, throw an error
                 raise FileNotFoundError(
@@ -382,11 +357,11 @@ def main(cfg: DictConfig):
         orr_log_vlm_image(vis_save_path_for_vlm)
         orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
 
-        # resize the observation if needed
-        resized_gobs = resize_gobs(raw_grounded_obs, image_rgb)
-        # filter the observations
-        filtered_gobs = filter_gobs(
-            resized_gobs,
+        # [3] resize the grounded observations
+        resized_grounded_obs = resize_gobs(raw_grounded_obs, image_rgb)
+        # [4] filter the observations
+        filtered_grounded_obs = filter_gobs(
+            resized_grounded_obs,
             image_rgb,
             skip_bg=cfg.skip_bg,
             BG_CLASSES=obj_classes.get_bg_classes_arr(),
@@ -395,18 +370,18 @@ def main(cfg: DictConfig):
             mask_conf_threshold=cfg.mask_conf_threshold,
         )
 
-        gobs = filtered_gobs
+        grounded_obs = filtered_grounded_obs
 
-        if len(gobs['mask']) == 0:  # no detections in this frame
+        if len(grounded_obs['mask']) == 0:  # no detections in this frame
             continue
 
-        # this helps make sure things like pillows on couches are separate objects
-        gobs['mask'] = mask_subtract_contained(gobs['xyxy'], gobs['mask'])
-        # TODO
+        # this helps make sure things like 베개 on 소파 are separate objects.
+        grounded_obs['mask'] = mask_subtract_contained(grounded_obs['xyxy'],
+                                                       grounded_obs['mask'])
         """
 -----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------
 depth_array.shape: (680, 1200)
-gobs['mask'][0].shape: (680, 1200)
+grounded_obs['mask'].shape: (N, 680, 1200)
 intrinsics.cpu().numpy()[:3, :3].shape: (3, 3)
 image_rgb.shape: (680, 1200, 3)
 adjusted_pose.shape: (4, 4)
@@ -414,13 +389,13 @@ adjusted_pose.shape: (4, 4)
 
         obj_pcds_and_bboxes = measure_time(detections_to_obj_pcd_and_bbox)(
             depth_array=depth_array,
-            masks=gobs['mask'],
+            masks=grounded_obs['mask'],
             cam_K=intrinsics.cpu().numpy()[:3, :3],  # Camera intrinsics
             image_rgb=image_rgb,
             trans_pose=adjusted_pose,
-            min_points_threshold=cfg.min_points_threshold, # 16
-            spatial_sim_type=cfg.spatial_sim_type, # overlap
-            obj_pcd_max_points=cfg.obj_pcd_max_points, # 5000
+            min_points_threshold=cfg.min_points_threshold,  # 16
+            spatial_sim_type=cfg.spatial_sim_type,  # overlap
+            obj_pcd_max_points=cfg.obj_pcd_max_points,  # 5000
             device=cfg.device,
         )
 
@@ -443,7 +418,8 @@ adjusted_pose.shape: (4, 4)
                 )
 
         detection_list = make_detection_list_from_pcd_and_gobs(
-            obj_pcds_and_bboxes, gobs, color_path, obj_classes, frame_idx)
+            obj_pcds_and_bboxes, grounded_obs, color_path, obj_classes,
+            frame_idx)
 
         if len(detection_list) == 0:  # no detections, skip
             continue
@@ -506,8 +482,8 @@ adjusted_pose.shape: (4, 4)
             if temp_class_name != most_common_class_name:
                 obj["class_name"] = most_common_class_name
 
-        map_edges = process_edges(match_indices, gobs, len(objects), objects,
-                                  map_edges, frame_idx)
+        map_edges = process_edges(match_indices, grounded_obs, len(objects),
+                                  objects, map_edges, frame_idx)
         is_final_frame = frame_idx == len(dataset) - 1
         if is_final_frame:
             print("Final frame detected. Performing final post-processing...")
@@ -634,7 +610,6 @@ adjusted_pose.shape: (4, 4)
             "is_final_frame": is_final_frame,
         })
     # LOOP OVER -----------------------------------------------------
-
 
     # Consolidate captions
     for object in objects:

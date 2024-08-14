@@ -231,8 +231,13 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         return color
 
     def _preprocess_depth(self, depth: np.ndarray):
-        r"""Preprocesses the depth image by resizing, adding channel dimension, and scaling values to meters. Optionally
-        converts depth from channels last :math:`(H, W, 1)` to channels first :math:`(1, H, W)` representation.
+        r"""Preprocesses the depth image by
+            resizing,
+            adding channel dimension, and
+            scaling values to meters.
+        Optionally converts depth
+            from channels last :math:`(H, W, 1)`
+            to channels first :math:`(1, H, W)` representation.
 
         Args:
             depth (np.ndarray): Raw depth image
@@ -429,7 +434,7 @@ class ICLDataset(GradSLAMDataset):
         embedding = torch.load(embedding_file_path)
         return embedding.permute(0, 2, 3, 1)  # (1, H, W, embedding_dim)
 
-
+# hsb
 class ReplicaDataset(GradSLAMDataset):
 
     def __init__(

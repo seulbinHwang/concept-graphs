@@ -281,12 +281,13 @@ def init_pcd_denoise_dbscan(pcd: o3d.geometry.PointCloud,
     return pcd
 
 
-def init_process_pcd(pcd,
-                     downsample_voxel_size, # 0.01
-                     dbscan_remove_noise,
-                     dbscan_eps,
-                     dbscan_min_points,
-                     run_dbscan=True):
+def init_process_pcd(
+        pcd,
+        downsample_voxel_size,  # 0.01
+        dbscan_remove_noise,
+        dbscan_eps,
+        dbscan_min_points,
+        run_dbscan=True):
     """
 이 함수는 주어진 포인트 클라우드(pcd)를 다운샘플링하고,
 필요시 노이즈 제거를 수행하여 정제된 포인트 클라우드를 반환
@@ -339,7 +340,10 @@ def process_pcd(pcd,
 
 
 # @profile
-def get_bounding_box(spatial_sim_type: str, pcd: o3d.geometry.PointCloud) -> Union[o3d.geometry.OrientedBoundingBox, o3d.geometry.AxisAlignedBoundingBox]:
+def get_bounding_box(
+    spatial_sim_type: str, pcd: o3d.geometry.PointCloud
+) -> Union[o3d.geometry.OrientedBoundingBox,
+           o3d.geometry.AxisAlignedBoundingBox]:
     if ("accurate" in spatial_sim_type or
             "overlap" in spatial_sim_type) and len(pcd.points) >= 4:
         try:
@@ -977,6 +981,45 @@ def filter_gobs(
         mask_conf_threshold:
     float = None,  # Explicitly passing mask_conf_threshold
 ):
+    """
+위 함수 `filter_gobs`는 객체 감지 결과(`gobs`)에서 다양한 기준에 따라 객체를 필터링하는 역할
+    - 이를 통해 원치 않거나 품질이 낮은 감지 결과를 제거하고, 
+    - 더 유의미한 객체 감지 결과만 남겨 후속 처리에 사용
+
+### 주요 기능과 역할:
+
+1. **감지 결과가 없는 경우 처리**:
+   - 함수는 먼저 `gobs`에 감지된 객체가 없는지 확인합니다. 
+   - 만약 감지된 객체가 없다면, 그대로 `gobs`를 반환하여 이후의 처리를 건너뜁니다.
+
+2. **필터링 기준 설정**:
+   - 다양한 필터링 기준을 설정하고, 각 기준에 따라 감지된 객체를 필터링합니다.
+     - **마스크 면적**: 
+        - 마스크의 면적이 `mask_area_threshold`보다 작은 객체는 필터링
+     - **배경 클래스 필터링**: 
+        - `skip_bg`가 활성화된 경우, 배경 클래스(`BG_CLASSES`)에 속하는 객체는 필터링
+     - **경계 상자 면적 비율**: 
+        - 경계 상자 면적이 이미지의 `max_bbox_area_ratio(0.5)`를 초과하는 객체는 필터링
+     - **신뢰도 필터링**: 
+        - 객체의 신뢰도가 `mask_conf_threshold`보다 낮은 경우 해당 객체는 필터링
+
+3. **필터링된 객체만 선택**:
+   - 위의 기준을 만족하는 객체들의 인덱스는 `idx_to_keep` 리스트에 저장
+   - 이후 이 인덱스를 사용하여 `gobs`의 각 속성에 대해 필터링된 객체들만 남깁니다.
+
+4. **속성별 필터링 적용**:
+   - `gobs`의 각 속성(예: `xyxy`, `mask`, `confidence` 등)에 대해, 
+        - 리스트 또는 Numpy 배열의 경우 `idx_to_keep`에 따라 필터링된 데이터를 유지합니다.
+   - 일부 속성(예: `labels`, `edges`, `captions`)은 필터링 과정에서 제외됩니다.
+
+5. **캡션 필터링**:
+   - `filter_captions` 함수를 사용하여 필터링된 객체들에 대한 캡션을 정리하고, 
+        - 이를 `gobs['captions']`에 다시 할당합니다.
+
+6. **필터링된 결과 반환**:
+   - 최종적으로 필터링된 감지 결과를 포함하는 `gobs`를 반환합니다. 
+        이 결과는 품질이 낮거나 원치 않는 감지 결과가 제거된 상태입니다.
+    """
     # If no detection at all
     if len(gobs['xyxy']) == 0:
         return gobs
@@ -989,7 +1032,7 @@ def filter_gobs(
 
         # Skip masks that are too small
         mask_area = gobs['mask'][mask_idx].sum()
-        if mask_area < max(mask_area_threshold, 10):
+        if mask_area < max(mask_area_threshold, 10):  # mask_area_threshold = 25
             logging.debug(
                 f"Skipped due to small mask area ({mask_area} pixels) - Class: {class_name}"
             )
@@ -1043,7 +1086,26 @@ def filter_gobs(
     return gobs
 
 
-def resize_gobs(gobs:Dict[str, Any], image):
+def resize_gobs(gobs: Dict[str, Any], image: np.ndarray):
+    """ YOLO의 input으로 원래 이미지를 resize해서 넣었으면 gobs가 resize되어 나오므로,
+    이를 다시 원래 이미지에 맞게 resize해주는 함수입니다. ("xyxy"와 "mask"를 resize합니다.)
+gobs = {
+    # add new uuid for each detection
+    "xyxy": curr_det.xyxy, # (34, 4)
+    "confidence": curr_det.confidence, # (34,)
+    "class_id": curr_det.class_id, # (34,)
+    "mask": curr_det.mask, # (34, 680, 1200)
+    "classes": obj_classes.get_classes_arr(), # len = 200, "alarm clock"
+    "image_crops": image_crops, # len = 34, <PIL.Image.Image>
+    "image_feats": image_feats, # (34, 1024)
+    "text_feats": text_feats, # len = 0 # 아마?
+    "detection_class_labels": detection_class_labels, # len = 34, "sofa chair 0"
+    "labels": labels, # len = 19, "sofa chair 0"
+    "edges": edges, # len = 0
+    "captions": captions, # len = 0
+}
+image: (H, W, 3)
+    """
 
     # If the shapes are the same, no resizing is necessary
     if gobs['mask'].shape[1:] == image.shape[:2]:
@@ -1388,11 +1450,12 @@ def dynamic_downsample(points, colors=None, target=5000):
 
 
 def batch_mask_depth_to_points_colors(
-        depth_tensor: torch.Tensor,
-        masks_tensor: torch.Tensor,
-        cam_K: torch.Tensor,
-        image_rgb_tensor: torch.Tensor = None,  # Parameter for RGB image tensor
-        device: str = 'cuda') -> Tuple[torch.Tensor, torch.Tensor]:
+    depth_tensor: torch.Tensor,
+    masks_tensor: torch.Tensor,
+    cam_K: torch.Tensor,
+    image_rgb_tensor: torch.Tensor = None,  # Parameter for RGB image tensor
+    device: str = 'cuda'
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Converts a batch of masked depth images to 3D points and corresponding colors.
 
@@ -1472,13 +1535,6 @@ def detections_to_obj_pcd_and_bbox(depth_array,
 
 ### 주요 역할과 기능:
 
-1. **입력 데이터 처리**:
-   - `depth_array`:
-   - `masks`: 각 객체에 대한 이진 마스크 배열로, 객체가 차지하는 픽셀을 1로 표시
-   - `cam_K`: 카메라의 내장행렬
-   - `image_rgb`: 선택적으로 RGB 이미지를 받아, 포인트 클라우드에 색상을 입힐 수 있음
-   - `trans_pose`: 선택적으로 입력된 변환 행렬로, 객체의 위치를 조정할 때 사용
-
 2. **텐서 변환 및 장치 할당**:
    - 입력 데이터를 PyTorch 텐서로 변환하고, 지정된 장치(`cuda` 또는 `cpu`)로 이동시킵니다.
 
@@ -1515,7 +1571,7 @@ def detections_to_obj_pcd_and_bbox(depth_array,
 
     Args:
         depth_array (numpy.ndarray): (680, 1200)
-        masks (numpy.ndarray): (680, 1200)
+        masks (numpy.ndarray): (N, 680, 1200)
         cam_K (numpy.ndarray): (3, 3)
         image_rgb (numpy.ndarray, optional): (680, 1200, 3)
         trans_pose (numpy.ndarray, optional): Transformation matrix. (4, 4)
@@ -1552,16 +1608,16 @@ image_rgb_tensor.shape:  torch.Size([680, 1200, 3])
 
     processed_objects = [None] * N  # Initialize with placeholders
     for i in range(N):
-        mask_points = points_tensor[i] # (H, W, 3)
+        mask_points = points_tensor[i]  # (H, W, 3)
         mask_colors = colors_tensor[i] if colors_tensor is not None else None
 
-        valid_points_mask = mask_points[:, :, 2] > 0 # (H, W)
+        valid_points_mask = mask_points[:, :, 2] > 0  # (H, W)
         print("valid_points_mask.shape: ", valid_points_mask.shape)
         # 5개 이상의 포인트가 없으면 -> 무시한다.
         if torch.sum(valid_points_mask) < min_points_threshold:
             continue
 
-        valid_points = mask_points[valid_points_mask] # (27633, 3)
+        valid_points = mask_points[valid_points_mask]  # (27633, 3)
         valid_colors = mask_colors[
             valid_points_mask] if mask_colors is not None else None
         """
@@ -1577,15 +1633,14 @@ obj_pcd_max_points = 5000
         # Create point cloud
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(
-            downsampled_points.cpu().numpy()) # (5527, 3)
+            downsampled_points.cpu().numpy())  # (5527, 3)
         if downsampled_colors is not None:
             pcd.colors = o3d.utility.Vector3dVector(
-                downsampled_colors.cpu().numpy()) # (5527, 3)
+                downsampled_colors.cpu().numpy())  # (5527, 3)
         # trans_pose: (4,4)
         if trans_pose is not None:
             pcd.transform(
                 trans_pose)  # Apply transformation directly to the point cloud
-            pass
 
         bbox = get_bounding_box(spatial_sim_type, pcd)
         if bbox.volume() < 1e-6:
