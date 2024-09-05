@@ -560,6 +560,8 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes,
 def handle_rerun_saving(use_rerun, save_rerun, exp_suffix, exp_out_path):
     # Save the rerun output if needed
     if use_rerun and save_rerun:
+        # rerun_file_path:
+        #   exps/r_mapping_stride10/rerun_r_mapping_stride10.rrd
         rerun_file_path = exp_out_path / f"rerun_{exp_suffix}.rrd"
         print("Mapping done!")
         print(

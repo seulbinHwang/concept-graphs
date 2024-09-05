@@ -138,6 +138,10 @@ def main(cfg: DictConfig):
         )
         frames = []
     # output folder for this mapping experiment
+    # dataset_root: Datasets
+    # scene_id: Replica/room0
+    # exp_suffix: r_mapping_stride10
+    # exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
     exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
                                     cfg.exp_suffix)
 
@@ -719,7 +723,7 @@ adjusted_pose.shape: (4, 4)
                                    cfg.obj_min_detections, adjusted_pose,
                                    color_path)
 
-        if cfg.vis_render:
+        if cfg.vis_render: # False
             # render a frame, if needed (not really used anymore since rerun)
             vis_render_image(
                 objects,
@@ -737,7 +741,7 @@ adjusted_pose.shape: (4, 4)
                 cfg.exp_out_path,
                 cfg.exp_suffix,
             )
-
+        # periodically_save_pcd: False
         if cfg.periodically_save_pcd and (
                 counter % cfg.periodically_save_pcd_interval == 0):
             # save the pointcloud
@@ -771,21 +775,30 @@ adjusted_pose.shape: (4, 4)
     # LOOP OVER -----------------------------------------------------
 
     # Consolidate captions
+
+    ##### 7. [시작] 각 물체마다, caption 합치기
     for object in objects:
-        obj_captions = object['captions'][:20]
+        obj_captions = object['captions'][:20] # 첫 20개만 사용
         consolidated_caption = consolidate_captions(openai_client, obj_captions)
         object['consolidated_caption'] = consolidated_caption
+    ##### 7. [끝] 각 물체마다, caption 합치기
 
+
+    # exp_suffix: r_mapping_stride10
+    # exp_out_path: exps/r_mapping_stride10/
     handle_rerun_saving(cfg.use_rerun, cfg.save_rerun, cfg.exp_suffix,
                         exp_out_path)
 
     # Save the pointcloud
-    if cfg.save_pcd:
+    if cfg.save_pcd: # True
+        # exp_suffix: rerun_r_mapping_stride10
+        # exp_out_path: exps/r_mapping_stride10/
         save_pointcloud(exp_suffix=cfg.exp_suffix,
                         exp_out_path=exp_out_path,
                         cfg=cfg,
                         objects=objects,
                         obj_classes=obj_classes,
+                        # ./latest_pcd_save
                         latest_pcd_filepath=cfg.latest_pcd_filepath,
                         create_symlink=True,
                         edges=map_edges)

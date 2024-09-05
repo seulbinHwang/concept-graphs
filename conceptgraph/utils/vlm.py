@@ -162,7 +162,43 @@ def encode_image_for_openai(image_path: str,
     return encoded_image
 
 
+
 def consolidate_captions(client: OpenAI, captions: list):
+    """
+
+[
+    {"id": "1", "name": "object1", "caption": "concise description of object1"},
+    {"id": "2", "name": "object2", "caption": "concise description of object2"},
+    ...
+]
+
+### 1. **주요 역할**
+- **여러 캡션을 입력**으로 받아, 이들 캡션을 분석하여 **중복 요소를 제거**하고 **하나의 통합된 캡션**을 생성
+- GPT 모델을 사용하여 캡션을 자동으로 통합합니다.
+
+### 2. **세부 알고리즘 로직**
+
+1. **캡션 포맷팅**:
+   - 입력으로 주어진 **여러 개의 캡션** 리스트에서 각각의 **캡션 텍스트**를 추출해 하나의 문자열로 결합
+    - 각 캡션은 줄바꿈(`\n`)을 통해 구분
+   - 이때 **None 값**을 가진 캡션은 무시
+
+2. **시스템 프롬프트 설정**:
+   - **시스템 프롬프트**는 모델에게 작업의 목적과 방법을 설명하는 역할
+   이 프롬프트는 모델이 각 캡션의 공통 요소를 식별하고,
+        가장 중요한 정보를 추출해 통합된 설명을 생성하도록 유도
+
+3. **GPT 모델 호출**:
+   - OpenAI의 GPT 모델에 **메시지**를 전달하여 통합된 캡션을 요청
+   - 모델은 주어진 캡션을 분석하고, 최종적으로 **하나의 통합된 캡션**을 생성하여 JSON 형식으로 반환
+
+4. **결과 처리**:
+   - 모델로부터 반환된 결과(JSON 형식)를 **파싱**하여 **통합된 캡션**을 추출
+   - 캡션을 추출하는 과정에서 **예외 처리**를 통해 오류 발생 시 빈 문자열을 반환
+
+### 3. **결론**
+이 함수는 여러 개의 설명(캡션)을 하나의 명확하고 일관된 설명으로 통합하는 기능을 제공하며, GPT 모델을 통해 자동으로 이 작업을 수행합니다. 이를 통해 중복되거나 불필요한 정보를 제거하고, **객체를 가장 잘 설명하는 최종 문구**를 생성할 수 있습니다.
+    """
     # Formatting the captions into a single string prompt
     captions_text = "\n".join(
         [f"{cap['caption']}" for cap in captions if cap['caption'] is not None])
