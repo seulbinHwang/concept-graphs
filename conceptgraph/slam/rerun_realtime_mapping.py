@@ -204,7 +204,7 @@ def main(cfg: DictConfig):
         color_tensor, depth_tensor, intrinsics, *_ = dataset[frame_idx]
 
         # Covert to numpy and do some sanity checks
-        depth_tensor = depth_tensor[..., 0] # (H, W)
+        depth_tensor = depth_tensor[..., 0]  # (H, W)
         depth_array = depth_tensor.cpu().numpy()
         color_np = color_tensor.cpu().numpy()  # (H, W, 3)
         image_rgb = (color_np).astype(np.uint8)  # (H, W, 3)

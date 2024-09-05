@@ -1,5 +1,7 @@
 '''
-The script is used to model Grounded SAM detections in 3D, it assumes the tag2text classes are avaialable. It also assumes the dataset has Clip features saved for each object/mask.
+The script is used to model Grounded SAM detections in 3D,
+it assumes the tag2text classes are avaialable.
+It also assumes the dataset has Clip features saved for each object/mask.
 '''
 
 # Standard library imports
@@ -213,26 +215,6 @@ def main(cfg: DictConfig):
 
         # Don't apply any transformation otherwise
         adjusted_pose = unt_pose
-
-        # if idx == 71:
-        #     fg_detection_list, bg_detection_list = gobs_to_detection_list(
-        #         cfg = cfg,
-        #         image = image_rgb,
-        #         depth_array = depth_array,
-        #         cam_K = cam_K,
-        #         idx = idx,
-        #         gobs = gobs,
-        #         trans_pose = adjusted_pose,
-        #         class_names = classes,
-        #         BG_CLASSES = BG_CLASSES,
-        #         color_path = color_path,
-        #     )
-        #     for det in fg_detection_list:
-        #         o3d.visualization.draw_geometries([det['pcd']])
-
-        #     exit()
-        # else:
-        #     continue
 
         fg_detection_list, bg_detection_list = gobs_to_detection_list(
             cfg=cfg,

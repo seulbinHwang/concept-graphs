@@ -1137,118 +1137,118 @@ image: (H, W, 3)
     return gobs
 
 
-# # @profile
-# def gobs_to_detection_list(
-#     image,
-#     depth_array,
-#     cam_K,
-#     idx,
-#     gobs,
-#     trans_pose = None,
-#     class_names = None,
-#     BG_CLASSES  = None,
-#     color_path = None,
-#     min_points_threshold: int = None,
-#     spatial_sim_type: str = None,
-#     downsample_voxel_size: float = None,  # New parameter
-#     dbscan_remove_noise: bool = None,     # New parameter
-#     dbscan_eps: float = None,             # New parameter
-#     dbscan_min_points: int = None         # New parameter
-# ):
-#     '''
-#     Return a DetectionList object from the gobs
-#     All object are still in the camera frame.
-#     '''
-#     fg_detection_list = DetectionList()
-#     bg_detection_list = DetectionList()
+# @profile
+def gobs_to_detection_list(
+    image,
+    depth_array,
+    cam_K,
+    idx,
+    gobs,
+    trans_pose = None,
+    class_names = None,
+    BG_CLASSES  = None,
+    color_path = None,
+    min_points_threshold: int = None,
+    spatial_sim_type: str = None,
+    downsample_voxel_size: float = None,  # New parameter
+    dbscan_remove_noise: bool = None,     # New parameter
+    dbscan_eps: float = None,             # New parameter
+    dbscan_min_points: int = None         # New parameter
+):
+    '''
+    Return a DetectionList object from the gobs
+    All object are still in the camera frame.
+    '''
+    fg_detection_list = DetectionList()
+    bg_detection_list = DetectionList()
 
-#     # gobs = resize_gobs(gobs, image)
-#     # gobs = filter_gobs(
-#     #     gobs,
-#     #     image,
-#     #     skip_bg=skip_bg,
-#     #     BG_CLASSES=BG_CLASSES,
-#     #     mask_area_threshold=mask_area_threshold,
-#     #     max_bbox_area_ratio=max_bbox_area_ratio,
-#     #     mask_conf_threshold=mask_conf_threshold,
-#     # )
+    # gobs = resize_gobs(gobs, image)
+    # gobs = filter_gobs(
+    #     gobs,
+    #     image,
+    #     skip_bg=skip_bg,
+    #     BG_CLASSES=BG_CLASSES,
+    #     mask_area_threshold=mask_area_threshold,
+    #     max_bbox_area_ratio=max_bbox_area_ratio,
+    #     mask_conf_threshold=mask_conf_threshold,
+    # )
 
-#     if len(gobs['xyxy']) == 0:
-#         return fg_detection_list, bg_detection_list
+    if len(gobs['xyxy']) == 0:
+        return fg_detection_list, bg_detection_list
 
-#     # Compute the containing relationship among all detections and subtract fg from bg objects
-#     xyxy = gobs['xyxy']
-#     mask = gobs['mask']
-#     # gobs['mask'] = mask_subtract_contained(xyxy, mask)
+    # Compute the containing relationship among all detections and subtract fg from bg objects
+    xyxy = gobs['xyxy']
+    mask = gobs['mask']
+    # gobs['mask'] = mask_subtract_contained(xyxy, mask)
 
-#     n_masks = len(gobs['xyxy'])
-#     for mask_idx in range(n_masks):
-#         local_class_id = gobs['class_id'][mask_idx]
-#         mask = gobs['mask'][mask_idx]
-#         class_name = gobs['classes'][local_class_id]
-#         global_class_id = -1 if class_names is None else class_names.index(class_name)
+    n_masks = len(gobs['xyxy'])
+    for mask_idx in range(n_masks):
+        local_class_id = gobs['class_id'][mask_idx]
+        mask = gobs['mask'][mask_idx]
+        class_name = gobs['classes'][local_class_id]
+        global_class_id = -1 if class_names is None else class_names.index(class_name)
 
-#         # make the pcd and color it
-#         camera_object_pcd = create_object_pcd(
-#             depth_array,
-#             mask,
-#             cam_K,
-#             image,
-#             obj_color = None
-#         )
+        # make the pcd and color it
+        camera_object_pcd = create_object_pcd(
+            depth_array,
+            mask,
+            cam_K,
+            image,
+            obj_color = None
+        )
 
-#         # It at least contains 5 points
-#         if len(camera_object_pcd.points) < max(min_points_threshold, 5):
-#             continue
+        # It at least contains 5 points
+        if len(camera_object_pcd.points) < max(min_points_threshold, 5):
+            continue
 
-#         if trans_pose is not None:
-#             global_object_pcd = camera_object_pcd.transform(trans_pose)
-#         else:
-#             global_object_pcd = camera_object_pcd
+        if trans_pose is not None:
+            global_object_pcd = camera_object_pcd.transform(trans_pose)
+        else:
+            global_object_pcd = camera_object_pcd
 
-#         # get largest cluster, filter out noise
-#         # global_object_pcd = process_pcd(global_object_pcd, cfg)
-#         global_object_pcd = process_pcd(global_object_pcd, downsample_voxel_size, dbscan_remove_noise, dbscan_eps, dbscan_min_points, run_dbscan=True)
+        # get largest cluster, filter out noise
+        # global_object_pcd = process_pcd(global_object_pcd, cfg)
+        global_object_pcd = process_pcd(global_object_pcd, downsample_voxel_size, dbscan_remove_noise, dbscan_eps, dbscan_min_points, run_dbscan=True)
 
-#         # pcd_bbox = get_bounding_box(cfg, global_object_pcd)
-#         pcd_bbox = get_bounding_box(spatial_sim_type, global_object_pcd)
-#         pcd_bbox.color = [0,1,0]
+        # pcd_bbox = get_bounding_box(cfg, global_object_pcd)
+        pcd_bbox = get_bounding_box(spatial_sim_type, global_object_pcd)
+        pcd_bbox.color = [0,1,0]
 
-#         if pcd_bbox.volume() < 1e-6:
-#             continue
+        if pcd_bbox.volume() < 1e-6:
+            continue
 
-#         # Treat the detection in the same way as a 3D object
-#         # Store information that is enough to recover the detection
-#         detected_object = {
-#             'id' : uuid.uuid4(),
-#             'image_idx' : [idx],                             # idx of the image
-#             'mask_idx' : [mask_idx],                         # idx of the mask/detection
-#             'color_path' : [color_path],                     # path to the RGB image
-#             'class_name' : [class_name],                         # global class id for this detection
-#             'class_id' : [global_class_id],                         # global class id for this detection
-#             'num_detections' : 1,                            # number of detections in this object
-#             'mask': [mask],
-#             'xyxy': [gobs['xyxy'][mask_idx]],
-#             'conf': [gobs['confidence'][mask_idx]],
-#             'n_points': [len(global_object_pcd.points)],
-#             'pixel_area': [mask.sum()],
-#             'contain_number': [None],                          # This will be computed later
-#             "inst_color": np.random.rand(3),                 # A random color used for this segment instance
-#             'is_background': class_name in BG_CLASSES,
+        # Treat the detection in the same way as a 3D object
+        # Store information that is enough to recover the detection
+        detected_object = {
+            'id' : uuid.uuid4(),
+            'image_idx' : [idx],                             # idx of the image
+            'mask_idx' : [mask_idx],                         # idx of the mask/detection
+            'color_path' : [color_path],                     # path to the RGB image
+            'class_name' : [class_name],                         # global class id for this detection
+            'class_id' : [global_class_id],                         # global class id for this detection
+            'num_detections' : 1,                            # number of detections in this object
+            'mask': [mask],
+            'xyxy': [gobs['xyxy'][mask_idx]],
+            'conf': [gobs['confidence'][mask_idx]],
+            'n_points': [len(global_object_pcd.points)],
+            'pixel_area': [mask.sum()],
+            'contain_number': [None],                          # This will be computed later
+            "inst_color": np.random.rand(3),                 # A random color used for this segment instance
+            'is_background': class_name in BG_CLASSES,
 
-#             # These are for the entire 3D object
-#             'pcd': global_object_pcd,
-#             'bbox': pcd_bbox,
-#             'clip_ft': to_tensor(gobs['image_feats'][mask_idx]),
-#             'text_ft': to_tensor(gobs['text_feats'][mask_idx]),
-#         }
+            # These are for the entire 3D object
+            'pcd': global_object_pcd,
+            'bbox': pcd_bbox,
+            'clip_ft': to_tensor(gobs['image_feats'][mask_idx]),
+            'text_ft': to_tensor(gobs['text_feats'][mask_idx]),
+        }
 
-#         if class_name in BG_CLASSES:
-#             bg_detection_list.append(detected_object)
-#         else:
-#             fg_detection_list.append(detected_object)
+        if class_name in BG_CLASSES:
+            bg_detection_list.append(detected_object)
+        else:
+            fg_detection_list.append(detected_object)
 
-#     return fg_detection_list, bg_detection_list
+    return fg_detection_list, bg_detection_list
 
 
 def transform_detection_list(
