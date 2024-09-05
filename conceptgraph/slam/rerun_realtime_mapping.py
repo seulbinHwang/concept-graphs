@@ -138,6 +138,8 @@ def main(cfg: DictConfig):
         skip_bg=detections_exp_cfg['skip_bg'])
 
     # if we need to do detections
+    # det_exp_path:
+    # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10
     print("det_exp_path:", det_exp_path)
     run_detections = check_run_detections(cfg.force_detection, det_exp_path)
     print("run_detections:", run_detections)
@@ -269,9 +271,15 @@ def main(cfg: DictConfig):
 
             # Make the edges
             # detection_class_labels: ["sofa chair 0", ...]
+
+            # det_exp_path:
+            # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10
+            # det_exp_vis_path:
+            # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10/vis
             print("det_exp_vis_path:", det_exp_vis_path)
             print("color_path:", color_path)
             print("cfg.make_edges:", cfg.make_edges)
+            raise NotImplementedError
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
                 image, curr_det, obj_classes, detection_class_labels,
                 det_exp_vis_path, color_path, cfg.make_edges, openai_client)
