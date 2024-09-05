@@ -117,8 +117,8 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         self.device = device
         self.png_depth_scale = config_dict["camera_params"]["png_depth_scale"]
 
-        self.orig_height = config_dict["camera_params"]["image_height"]
-        self.orig_width = config_dict["camera_params"]["image_width"]
+        self.orig_height = config_dict["camera_params"]["image_height"] # 680
+        self.orig_width = config_dict["camera_params"]["image_width"] # 1200
         self.fx = config_dict["camera_params"]["fx"]
         self.fy = config_dict["camera_params"]["fy"]
         self.cx = config_dict["camera_params"]["cx"]
@@ -436,22 +436,28 @@ class ICLDataset(GradSLAMDataset):
 
 # hsb
 class ReplicaDataset(GradSLAMDataset):
-
     def __init__(
         self,
+        # from dataset/dataconfigs/replica/replica.yaml
         config_dict,
-        basedir,
-        sequence,
-        stride: Optional[int] = None,
+        basedir, # Replica #####
+        sequence, # room0 #####
+        stride: Optional[int] = None, # 50
         start: Optional[int] = 0,
         end: Optional[int] = -1,
-        desired_height: Optional[int] = 480,
-        desired_width: Optional[int] = 640,
+        desired_height: Optional[int] = 480, # None
+        desired_width: Optional[int] = 640, # None
         load_embeddings: Optional[bool] = False,
         embedding_dir: Optional[str] = "embeddings",
         embedding_dim: Optional[int] = 512,
-        **kwargs,
+        **kwargs, #####
     ):
+        """
+            **kwargs:
+        device="cpu",
+        dtype=torch.float,
+        """
+        # input_folder: Replica/room0
         self.input_folder = os.path.join(basedir, sequence)
         self.pose_path = os.path.join(self.input_folder, "traj.txt")
         super().__init__(
@@ -468,8 +474,10 @@ class ReplicaDataset(GradSLAMDataset):
         )
 
     def get_filepaths(self):
+        # color_paths = [] from "Replica/room0/results/frame*.jpg"
         color_paths = natsorted(
             glob.glob(f"{self.input_folder}/results/frame*.jpg"))
+        # depth_paths = [] from "Replica/room0/results/depth*.png"
         depth_paths = natsorted(
             glob.glob(f"{self.input_folder}/results/depth*.png"))
         embedding_paths = None
@@ -1101,6 +1109,17 @@ def common_dataset_to_batch(dataset):
 
 @measure_time
 def get_dataset(dataconfig, basedir, sequence, **kwargs):
+    """
+
+    Args:
+        dataconfig: dataset/dataconfigs/replica/replica.yaml
+        basedir: Replica
+        sequence: room0
+        **kwargs:
+
+    Returns:
+
+    """
     config_dict = load_dataset_config(dataconfig)
     if config_dict["dataset_name"].lower() in ["icl"]:
         return ICLDataset(config_dict, basedir, sequence, **kwargs)

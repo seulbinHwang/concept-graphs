@@ -72,144 +72,229 @@ torch.set_grad_enabled(False)
 RUN_OPEN_API = False
 
 
-"""
-이 함수는 **Hydra**라는 도구를 사용해 **설정 파일을 기반으로 작업을 실행**하는 역할
-    - `@hydra.main`이라는 데코레이터를 사용해 Hydra 설정 파일을 불러와 프로그램의 실행 환경을 설정
 
-### 1. **주요 역할**
-- `config_path`와 `config_name`에 지정된 설정 파일을 불러와서, 그 설정에 따라 프로그램을 실행 
+import rclpy
+from rclpy.node import Node
+import message_filters
+from sensor_msgs.msg import CompressedImage, CameraInfo
+from vision_msgs.msg import BoundingBox2DArray, BoundingBox2D
+import numpy as np
+import cv2
+from typing import Tuple, List, Dict, Any, Union, Optional
+from tf2_ros.buffer import Buffer
+from tf2_ros.transform_listener import TransformListener
+from geometry_msgs.msg import TransformStamped
+import tf_transformations
+import argparse
+from experimental.human_detection.utils import segmentation_utils
+from experimental.human_detection.utils import general_utils
+from experimental.human_detection.utils import visualization_utils
+from tf2_ros import (ConnectivityException, ExtrapolationException,
+                     LookupException)
+from scipy.spatial.transform import Rotation as R
+import os
+import traceback
 
-### 2. **세부 로직**
-- **Hydra 데코레이터 사용**: `@hydra.main`은 Hydra 설정을 적용하는 데 사용됩니다. 
-    - 여기서 설정 파일은 `../hydra_configs/` 폴더 안에 있으며, 
-        - `rerun_realtime_mapping.yaml` 파일이 사용됩니다.
-- **`cfg` 객체**: 
-    - 이 설정 파일의 내용이 `cfg`라는 **구성 객체**(여기서는 `DictConfig` 타입)로 전달
-        - 이 객체를 통해 설정값을 접근하고, 프로그램의 동작을 제어할 수 있습니다.
 
-"""
-# A logger for this file
-@hydra.main(version_base=None,
-            config_path="../hydra_configs/",
-            config_name="rerun_realtime_mapping")
-# @profile
-def main(cfg: DictConfig):
-    tracker = MappingTracker()
+class RealtimeHumanSegmenterNode(Node):
 
-    orr = OptionalReRun()
-    orr.set_use_rerun(cfg.use_rerun)
-    orr.init("realtime_mapping")
-    orr.spawn()
+    def __init__(self, cfg: DictConfig):
+        super().__init__('ros2_bridge')
+        tracker = MappingTracker()
 
-    owandb = OptionalWandB()
-    owandb.set_use_wandb(cfg.use_wandb)
-    owandb.init(
-        project="concept-graphs",
-        #    entity="concept-graphs",
-        config=cfg_to_dict(cfg),
-    )
-    cfg = process_cfg(cfg)
+        orr = OptionalReRun()
+        orr.set_use_rerun(cfg.use_rerun)
+        orr.init("realtime_mapping")
+        orr.spawn()
 
-    # Initialize the dataset
-    dataset = get_dataset(
-        # dataset/dataconfigs/replica/replica.yaml
-        dataconfig=cfg.dataset_config,
-        # Replica
-        basedir=cfg.dataset_root,
-        # room0
-        sequence=cfg.scene_id,
-        start=cfg.start, # 0
-        end=cfg.end, # -1
-        stride=cfg.stride, # 50
-        desired_height=cfg.image_height, # None # 680
-        desired_width=cfg.image_width, # None # 1200
-        device="cpu",
-        dtype=torch.float,
-    )
-    # cam_K = dataset.get_cam_K()
-
-    objects = MapObjectList(device=cfg.device)
-    map_edges = MapEdgeMapping(objects)
-
-    # For visualization
-    if cfg.vis_render:
-        # render a frame, if needed (not really used anymore since rerun)
-        view_param = read_pinhole_camera_parameters(cfg.render_camera_path)
-        obj_renderer = OnlineObjectRenderer(
-            view_param=view_param,
-            base_objects=None,
-            gray_map=False,
+        owandb = OptionalWandB()
+        owandb.set_use_wandb(cfg.use_wandb)
+        owandb.init(
+            project="concept-graphs",
+            #    entity="concept-graphs",
+            config=cfg_to_dict(cfg),
         )
-        frames = []
-    # output folder for this mapping experiment
-    # dataset_root: Datasets
-    # scene_id: Replica/room0
-    # exp_suffix: r_mapping_stride10
-    # exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
-    exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
-                                    cfg.exp_suffix)
+        cfg = process_cfg(cfg)
+        objects = MapObjectList(device=cfg.device)
+        map_edges = MapEdgeMapping(objects)
 
-    # output folder of the detections experiment to use
-    det_exp_path = get_exp_out_path(cfg.dataset_root,
-                                    cfg.scene_id,
-                                    cfg.detections_exp_suffix,
-                                    make_dir=False)
+        # output folder for this mapping experiment
+        # dataset_root: Datasets
+        # scene_id: Replica/room0
+        # exp_suffix: r_mapping_stride10
+        # exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
+        exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
+                                        cfg.exp_suffix)
 
-    # we need to make sure to use the same classes as the ones used in the detections
-    detections_exp_cfg = cfg_to_dict(cfg)
-    obj_classes = ObjectClasses(
-        classes_file_path=detections_exp_cfg['classes_file'],
-        bg_classes=detections_exp_cfg['bg_classes'],
-        skip_bg=detections_exp_cfg['skip_bg'])
+        # output folder of the detections experiment to use
+        # det_exp_path: Datasets/Replica/room0/exps/s_detections_stride10
+        det_exp_path = get_exp_out_path(cfg.dataset_root,
+                                        cfg.scene_id,
+                                        cfg.detections_exp_suffix,
+                                        make_dir=False)
 
-    # if we need to do detections
-    # det_exp_path:
-    # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10
-    print("det_exp_path:", det_exp_path)
-    run_detections = check_run_detections(cfg.force_detection, det_exp_path)
-    print("run_detections:", run_detections)
-    det_exp_pkl_path = get_det_out_path(det_exp_path)
-    det_exp_vis_path = get_vis_out_path(det_exp_path)
+        # we need to make sure to use the same classes as the ones used in the detections
+        detections_exp_cfg = cfg_to_dict(cfg)
+        obj_classes = ObjectClasses(
+            classes_file_path=detections_exp_cfg['classes_file'],
+            bg_classes=detections_exp_cfg['bg_classes'],
+            skip_bg=detections_exp_cfg['skip_bg'])
 
-    prev_adjusted_pose = None
+        # if we need to do detections
+        # det_exp_path:
+        # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10
+        print("det_exp_path:", det_exp_path)
+        run_detections = check_run_detections(cfg.force_detection, det_exp_path)
+        print("run_detections:", run_detections)
+        det_exp_pkl_path = get_det_out_path(det_exp_path)
+        det_exp_vis_path = get_vis_out_path(det_exp_path)
 
-    if run_detections:
-        print("\n".join(["Running detections..."] * 10))
-        det_exp_path.mkdir(parents=True, exist_ok=True)
+        prev_adjusted_pose = None
 
-        ## Initialize the detection models
-        detection_model = measure_time(YOLO)('yolov8l-world.pt')
-        sam_predictor = SAM(
-            'sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
-        # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
-        clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
-            "ViT-H-14", "laion2b_s32b_b79k")
-        clip_model = clip_model.to(cfg.device)
-        clip_tokenizer = open_clip.get_tokenizer("ViT-H-14")
+        if run_detections:
+            print("\n".join(["Running detections..."] * 10))
+            det_exp_path.mkdir(parents=True, exist_ok=True)
 
-        # Set the classes for the detection model
-        detection_model.set_classes(obj_classes.get_classes_arr())
-        if RUN_OPEN_API:
-            openai_client = get_openai_client()
+            ## Initialize the detection models
+            detection_model = measure_time(YOLO)('yolov8l-world.pt')
+            sam_predictor = SAM(
+                'sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
+            # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
+            clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
+                "ViT-H-14", "laion2b_s32b_b79k")
+            clip_model = clip_model.to(cfg.device)
+            clip_tokenizer = open_clip.get_tokenizer("ViT-H-14")
+
+            # Set the classes for the detection model
+            detection_model.set_classes(obj_classes.get_classes_arr())
+            if RUN_OPEN_API:
+                openai_client = get_openai_client()
+            else:
+                openai_client = None
+
         else:
-            openai_client = None
+            print("\n".join(["NOT Running detections..."] * 10))
 
-    else:
-        print("\n".join(["NOT Running detections..."] * 10))
+        save_hydra_config(cfg, exp_out_path)
+        save_hydra_config(detections_exp_cfg,
+                          exp_out_path,
+                          is_detection_config=True)
 
-    save_hydra_config(cfg, exp_out_path)
-    save_hydra_config(detections_exp_cfg,
-                      exp_out_path,
-                      is_detection_config=True)
+        if cfg.save_objects_all_frames:
+            obj_all_frames_out_path = exp_out_path / "saved_obj_all_frames" / f"det_{cfg.detections_exp_suffix}"
+            os.makedirs(obj_all_frames_out_path, exist_ok=True)
 
-    if cfg.save_objects_all_frames:
-        obj_all_frames_out_path = exp_out_path / "saved_obj_all_frames" / f"det_{cfg.detections_exp_suffix}"
-        os.makedirs(obj_all_frames_out_path, exist_ok=True)
+        exit_early_flag = False
+        counter = 0
+        ###################################
 
-    exit_early_flag = False
-    counter = 0
+        self._tf_buffer = Buffer()
+        self._tf_listener = TransformListener(self._tf_buffer, self)
+        self._frame_idx = 0
+        self._camera_pose = self._set_extrinsic()
+        bbox_2d_topic = \
+            f"realsense{self.args.realsense_idx}/bounding_boxes_2d"
+        self.bounding_boxes_pub = self.create_publisher(BoundingBox2DArray,
+                                                        bbox_2d_topic, 10)
 
-    for frame_idx in trange(len(dataset)):
+        self._set_rgbd_info_subscribers()
+        self._target_frame = f"realsense{self.args.realsense_idx}"
+        self._source_frame = "base_link"
+        self._set_rgbd_subscribers()
+
+    def _set_rgbd_subscribers(self):
+        rgb_sub_topic_name = f"realsense{self.args.realsense_idx}/color"
+        rgb_sub = message_filters.Subscriber(self, CompressedImage,
+                                             rgb_sub_topic_name)
+        depth_sub_topic_name = \
+            f"realsense{self.args.realsense_idx}/depth"
+        depth_sub = message_filters.Subscriber(self, CompressedImage,
+                                               depth_sub_topic_name)
+        self.ts = message_filters.ApproximateTimeSynchronizer(
+            [rgb_sub, depth_sub], queue_size=10, slop=0.1)
+        self.ts.registerCallback(self.sync_callback)
+
+    def _set_rgbd_info_subscribers(self):
+        color_camera_info_topic_name = \
+            f"realsense{self.args.realsense_idx}/color_camera_info"
+        self.rgb_camera_matrix = self.rgb_dist_coeffs = None
+        self.color_camera_info_sub = self.create_subscription(
+            CameraInfo, color_camera_info_topic_name,
+            self.color_camera_info_callback, 10)
+
+        depth_camera_info_topic_name = \
+            f"realsense{self.args.realsense_idx}/depth_camera_info"
+        self.intrinsic = self.depth_dist_coeffs = None
+        self.depth_camera_info_sub = self.create_subscription(
+            CameraInfo, depth_camera_info_topic_name,
+            self.depth_camera_info_callback, 10)
+
+    def _set_extrinsic(self) -> np.ndarray:
+        axis_transpose_matrix = np.array([[0., -1., 0., 0.], [0., 0., -1., 0.],
+                                          [1., 0., 0., 0.], [0., 0., 0., 1.]])
+        if self.args.realsense_idx == 0:  # 로봇 정면 기준 왼쪽 카메라 (+y)
+            camera_translation = np.array([0.23547, 0.10567, 0.90784])
+            camera_radian_rotation = np.deg2rad(np.array(
+                [0., 52., 20.]))  # yaw 회전 후 -> roll -> ptich
+            rotation = R.from_euler(
+                'xyz', camera_radian_rotation
+            )  # same as yaw_matrix @ pitch_matrix @ roll_matrix
+            rotation_matrix_3 = rotation.as_matrix()
+            rotation_matrix = np.eye(4)
+            rotation_matrix[:3, :3] = rotation_matrix_3
+        elif self.args.realsense_idx == 2:  # 로봇 정면 기준 오른쪽 카메라 (-y)
+            camera_translation = np.array([0.23547, -0.10567, 0.90784])
+            camera_degree_rotation = np.deg2rad(np.array(
+                [0., 52., -20.]))  # yaw 회전 후 -> roll -> ptich
+            rotation = R.from_euler('xyz', camera_degree_rotation)
+            rotation_matrix_3 = rotation.as_matrix()
+            rotation_matrix = np.eye(4)
+            rotation_matrix[:3, :3] = rotation_matrix_3
+        else:
+            raise ValueError("Invalid realsense_idx")
+        translation_matrix = tf_transformations.translation_matrix(
+            camera_translation)
+        (camera_pose) = translation_matrix @ rotation_matrix @ np.linalg.inv(
+            axis_transpose_matrix)
+        return camera_pose
+
+    @staticmethod
+    def _transform_stamped_to_matrix(transform: TransformStamped) -> np.ndarray:
+        # 평행 이동 벡터 추출
+        translation = transform.transform.translation
+        trans = np.array([translation.x, translation.y, translation.z])
+
+        # 쿼터니언 추출 및 회전 행렬 생성
+        rotation = transform.transform.rotation
+        quat = [rotation.x, rotation.y, rotation.z, rotation.w]
+        rotation_matrix = tf_transformations.quaternion_matrix(quat)  # 4x4 행렬
+
+        # 4x4 변환 행렬 생성
+        transform_matrix = np.identity(4)
+        transform_matrix[:3, :3] = rotation_matrix[:3, :3]  # 회전 부분 적용
+        transform_matrix[:3, 3] = trans  # 평행 이동 부분 적용
+
+        return transform_matrix
+
+    def _add_all_true_mask(self, rgb_array: np.ndarray,
+                           masks_np: np.ndarray) -> np.ndarray:
+        H, W, _ = rgb_array.shape
+        all_true_mask = np.expand_dims(np.ones((H, W), dtype=np.uint8), axis=0)
+        if (masks_np is None) or (len(masks_np) == 0):
+            masks_np = all_true_mask
+        else:
+            masks_np = np.concatenate([all_true_mask, masks_np], axis=0)
+        return masks_np
+
+    def sync_callback(self, rgb_msg: CompressedImage,
+                      depth_msg: CompressedImage):
+        if self.intrinsic is None:
+            return
+        if self._camera_pose is None:
+            self._camera_pose = self._get_pose_data()
+        rgb_array = self.rgb_callback(rgb_msg)
+        depth_array = self.depth_callback(depth_msg)
+        #################
         tracker.curr_frame_idx = frame_idx
         counter += 1
         orr.set_time_sequence("frame", frame_idx)
@@ -226,7 +311,7 @@ def main(cfg: DictConfig):
         # Read info about current frame from dataset
         # color image
         color_path = Path(dataset.color_paths[frame_idx])
-        image_original_pil = Image.open(color_path) # 필요 없음
+        image_original_pil = Image.open(color_path)  # 필요 없음
         # color and depth tensors, and camera instrinsics matrix
         """
         color_path -> image_original_pil (PIL) # 필요 없음
@@ -346,7 +431,6 @@ def main(cfg: DictConfig):
                 clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
             ##### 2. [끝] CLIP feature를 계산
 
-
             # increment total object detections
             tracker.increment_total_detections(len(curr_det.xyxy))
 
@@ -382,7 +466,7 @@ def main(cfg: DictConfig):
                 # Datasets/Replica/room0/exps/s_detections_stride10/vis/frame000000.jpg
                 """ 4장 그림 그려서 저장하는 과정임
                 vis_save_path: bounding box와 mask가 모두 그려진 이미지
-                
+
                 """
                 vis_save_path = (det_exp_vis_path /
                                  color_path.name).with_suffix(".jpg")
@@ -437,7 +521,7 @@ def main(cfg: DictConfig):
 
         orr_log_rgb_image(color_path)
         orr_log_annotated_image(color_path, det_exp_vis_path)
-        orr_log_depth_image(depth_tensor) # resized
+        orr_log_depth_image(depth_tensor)  # resized
         orr_log_vlm_image(vis_save_path_for_vlm)
         orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
         """
@@ -504,17 +588,17 @@ adjusted_pose.shape: (4, 4)
         # obj_pcds_and_bboxes : [ {'pcd': pcd, 'bbox': bbox} , ... ]
         obj_pcds_and_bboxes: List[Dict[str, Any]] = measure_time(
             detections_to_obj_pcd_and_bbox)(
-                depth_array=depth_array,
-                masks=grounded_obs['mask'],
-                cam_K=intrinsics.cpu().numpy()[:3, :3],  # Camera intrinsics
-                image_rgb=image_rgb,
-                trans_pose=adjusted_pose,
-                min_points_threshold=cfg.min_points_threshold,  # 16
+            depth_array=depth_array,
+            masks=grounded_obs['mask'],
+            cam_K=intrinsics.cpu().numpy()[:3, :3],  # Camera intrinsics
+            image_rgb=image_rgb,
+            trans_pose=adjusted_pose,
+            min_points_threshold=cfg.min_points_threshold,  # 16
             # overlap # "iou", "giou", "overlap"
-                spatial_sim_type=cfg.spatial_sim_type,  # overlap
-                obj_pcd_max_points=cfg.obj_pcd_max_points,  # 5000
-                device=cfg.device,
-            )
+            spatial_sim_type=cfg.spatial_sim_type,  # overlap
+            obj_pcd_max_points=cfg.obj_pcd_max_points,  # 5000
+            device=cfg.device,
+        )
 
         for obj in obj_pcds_and_bboxes:
             if obj:
@@ -528,14 +612,14 @@ adjusted_pose.shape: (4, 4)
                 ##### 3.1. [시작] pointclouds 필터링
                 obj["pcd"] = init_process_pcd(
                     pcd=obj["pcd"],
-                    downsample_voxel_size=cfg["downsample_voxel_size"], # 0.01
-                    dbscan_remove_noise=cfg["dbscan_remove_noise"], # True
-                    dbscan_eps=cfg["dbscan_eps"], # 0.1
-                    dbscan_min_points=cfg["dbscan_min_points"], # 10
+                    downsample_voxel_size=cfg["downsample_voxel_size"],  # 0.01
+                    dbscan_remove_noise=cfg["dbscan_remove_noise"],  # True
+                    dbscan_eps=cfg["dbscan_eps"],  # 0.1
+                    dbscan_min_points=cfg["dbscan_min_points"],  # 10
                 )
                 # point cloud를 filtering 했으니, bounding box를 다시 계산
                 obj["bbox"] = get_bounding_box(
-                    spatial_sim_type=cfg['spatial_sim_type'], # overlap
+                    spatial_sim_type=cfg['spatial_sim_type'],  # overlap
                     pcd=obj["pcd"],
                 )
                 ##### 3.1. [끝] pointclouds 필터링
@@ -559,7 +643,7 @@ adjusted_pose.shape: (4, 4)
                 "captions": captions,  # len = 0
             }
         color_path: Datasets/Replica/room0/results/frame000000.jpg
-        
+
         """
         detection_list = make_detection_list_from_pcd_and_gobs(
             obj_pcds_and_bboxes, grounded_obs, color_path, obj_classes,
@@ -568,8 +652,6 @@ adjusted_pose.shape: (4, 4)
         if len(detection_list) == 0:  # no detections, skip
             continue
         ##### 3. [끝] pointclouds 만들기
-
-
 
         ##### 4. [시작] 기존 object 들과 융합하기
 
@@ -588,10 +670,10 @@ adjusted_pose.shape: (4, 4)
         ### compute similarities and then merge
         # spatial_sim : (새 검지 개수, 누적 물체 개수) -> 각 값은 det와 obj의 중첩 비율
         spatial_sim = compute_spatial_similarities(
-            spatial_sim_type=cfg['spatial_sim_type'], # overlap
+            spatial_sim_type=cfg['spatial_sim_type'],  # overlap
             detection_list=detection_list,
             objects=objects,
-            downsample_voxel_size=cfg['downsample_voxel_size']) # 0.01
+            downsample_voxel_size=cfg['downsample_voxel_size'])  # 0.01
         # visual_sim :  (새 검지 개수, 누적 물체 개수) -> 각 값은 det와 obj의 코싸인 유사도
         visual_sim = compute_visual_similarities(detection_list, objects)
 
@@ -616,23 +698,20 @@ adjusted_pose.shape: (4, 4)
             detection_list=detection_list,
             objects=objects,
             match_indices=match_indices,
-            downsample_voxel_size=cfg['downsample_voxel_size'], # 0.01
-            dbscan_remove_noise=cfg['dbscan_remove_noise'], # True
-            dbscan_eps=cfg['dbscan_eps'], # 0.1
-            dbscan_min_points=cfg['dbscan_min_points'], # 10
-            spatial_sim_type=cfg['spatial_sim_type'], # overlap
+            downsample_voxel_size=cfg['downsample_voxel_size'],  # 0.01
+            dbscan_remove_noise=cfg['dbscan_remove_noise'],  # True
+            dbscan_eps=cfg['dbscan_eps'],  # 0.1
+            dbscan_min_points=cfg['dbscan_min_points'],  # 10
+            spatial_sim_type=cfg['spatial_sim_type'],  # overlap
             device=cfg['device']
             # Note: Removed 'match_method' and 'phys_bias' as they do not appear in the provided merge function
         )
         ##### 4. [끝] 기존 object 들과 융합하기
 
-
-
-
         # fix the class names for objects
         # they should be the most popular name, not the first name
         for idx, obj in enumerate(objects):
-            temp_class_name = obj["class_name"] # "sofa chair"
+            temp_class_name = obj["class_name"]  # "sofa chair"
             curr_obj_class_id_counter = Counter(obj['class_id'])
             most_common_class_id = curr_obj_class_id_counter.most_common(
                 1)[0][0]
@@ -640,7 +719,6 @@ adjusted_pose.shape: (4, 4)
             )[most_common_class_id]
             if temp_class_name != most_common_class_name:
                 obj["class_name"] = most_common_class_name
-
 
         ##### 5. [시작] edge 계산하기
 
@@ -669,26 +747,26 @@ adjusted_pose.shape: (4, 4)
 
         # Denoising
         if processing_needed(
-            # Run DBSCAN every k frame. This operation is heavy
-                cfg["denoise_interval"], # 20
-                cfg["run_denoise_final_frame"], # True
+                # Run DBSCAN every k frame. This operation is heavy
+                cfg["denoise_interval"],  # 20
+                cfg["run_denoise_final_frame"],  # True
                 frame_idx,
                 is_final_frame,
         ):
             objects = measure_time(denoise_objects)(
-                downsample_voxel_size=cfg['downsample_voxel_size'], # 0.01
-                dbscan_remove_noise=cfg['dbscan_remove_noise'], # True
-                dbscan_eps=cfg['dbscan_eps'], # 0.1
-                dbscan_min_points=cfg['dbscan_min_points'], # 10
-                spatial_sim_type=cfg['spatial_sim_type'], # overlap
+                downsample_voxel_size=cfg['downsample_voxel_size'],  # 0.01
+                dbscan_remove_noise=cfg['dbscan_remove_noise'],  # True
+                dbscan_eps=cfg['dbscan_eps'],  # 0.1
+                dbscan_min_points=cfg['dbscan_min_points'],  # 10
+                spatial_sim_type=cfg['spatial_sim_type'],  # overlap
                 device=cfg['device'],
                 objects=objects)
 
         # Filtering
         if processing_needed(
-            # Filter objects that have too few associations or are too small
-                cfg["filter_interval"], # 5
-                cfg["run_filter_final_frame"], # True
+                # Filter objects that have too few associations or are too small
+                cfg["filter_interval"],  # 5
+                cfg["run_filter_final_frame"],  # True
                 frame_idx,
                 is_final_frame,
         ):
@@ -700,9 +778,9 @@ adjusted_pose.shape: (4, 4)
 
         # Merging
         if processing_needed(
-            # Merge objects based on geometric and semantic similarity
-                cfg["merge_interval"], # 5
-                cfg["run_merge_final_frame"], # True
+                # Merge objects based on geometric and semantic similarity
+                cfg["merge_interval"],  # 5
+                cfg["run_merge_final_frame"],  # True
                 frame_idx,
                 is_final_frame,
         ):
@@ -724,13 +802,12 @@ adjusted_pose.shape: (4, 4)
 
         ##### 6. [끝] 주기적 "누적 object" 후처리
 
-
         if cfg.save_objects_all_frames:
             save_objects_for_frame(obj_all_frames_out_path, frame_idx, objects,
                                    cfg.obj_min_detections, adjusted_pose,
                                    color_path)
 
-        if cfg.vis_render: # False
+        if cfg.vis_render:  # False
             # render a frame, if needed (not really used anymore since rerun)
             vis_render_image(
                 objects,
@@ -779,64 +856,257 @@ adjusted_pose.shape: (4, 4)
             "exit_early_flag": exit_early_flag,
             "is_final_frame": is_final_frame,
         })
-    # LOOP OVER -----------------------------------------------------
 
-    # Consolidate captions
+        #################
 
-    ##### 7. [시작] 각 물체마다, caption 합치기
-    for object in objects:
-        obj_captions = object['captions'][:20] # 첫 20개만 사용
-        consolidated_caption = consolidate_captions(openai_client, obj_captions)
-        object['consolidated_caption'] = consolidated_caption
-    ##### 7. [끝] 각 물체마다, caption 합치기
+    def wrap_up(self):
+        # Consolidate captions
 
+        ##### 7. [시작] 각 물체마다, caption 합치기
+        for object in objects:
+            obj_captions = object['captions'][:20]  # 첫 20개만 사용
+            consolidated_caption = consolidate_captions(openai_client,
+                                                        obj_captions)
+            object['consolidated_caption'] = consolidated_caption
+        ##### 7. [끝] 각 물체마다, caption 합치기
 
-    # exp_suffix: r_mapping_stride10
-    # exp_out_path: exps/r_mapping_stride10/
-    handle_rerun_saving(cfg.use_rerun, cfg.save_rerun, cfg.exp_suffix,
-                        exp_out_path)
-
-    # Save the pointcloud
-    if cfg.save_pcd: # True
-        # exp_suffix: rerun_r_mapping_stride10
+        # exp_suffix: r_mapping_stride10
         # exp_out_path: exps/r_mapping_stride10/
-        save_pointcloud(exp_suffix=cfg.exp_suffix,
-                        exp_out_path=exp_out_path,
-                        cfg=cfg,
-                        objects=objects,
-                        obj_classes=obj_classes,
-                        # ./latest_pcd_save
-                        latest_pcd_filepath=cfg.latest_pcd_filepath,
-                        create_symlink=True,
-                        edges=map_edges)
+        handle_rerun_saving(cfg.use_rerun, cfg.save_rerun, cfg.exp_suffix,
+                            exp_out_path)
 
-    if cfg.save_json:
-        save_obj_json(exp_suffix=cfg.exp_suffix,
-                      exp_out_path=exp_out_path,
-                      objects=objects)
+        # Save the pointcloud
+        if cfg.save_pcd:  # True
+            # exp_suffix: rerun_r_mapping_stride10
+            # exp_out_path: exps/r_mapping_stride10/
+            save_pointcloud(exp_suffix=cfg.exp_suffix,
+                            exp_out_path=exp_out_path,
+                            cfg=cfg,
+                            objects=objects,
+                            obj_classes=obj_classes,
+                            # ./latest_pcd_save
+                            latest_pcd_filepath=cfg.latest_pcd_filepath,
+                            create_symlink=True,
+                            edges=map_edges)
 
-        save_edge_json(exp_suffix=cfg.exp_suffix,
-                       exp_out_path=exp_out_path,
-                       objects=objects,
-                       edges=map_edges)
+        if cfg.save_json:
+            save_obj_json(exp_suffix=cfg.exp_suffix,
+                          exp_out_path=exp_out_path,
+                          objects=objects)
 
-    # Save metadata if all frames are saved
-    if cfg.save_objects_all_frames:
-        save_meta_path = obj_all_frames_out_path / f"meta.pkl.gz"
-        with gzip.open(save_meta_path, "wb") as f:
-            pickle.dump(
-                {
-                    'cfg': cfg,
-                    'class_names': obj_classes.get_classes_arr(),
-                    'class_colors': obj_classes.get_class_color_dict_by_index(),
-                }, f)
+            save_edge_json(exp_suffix=cfg.exp_suffix,
+                           exp_out_path=exp_out_path,
+                           objects=objects,
+                           edges=map_edges)
 
-    if run_detections:
-        if cfg.save_video:
-            save_video_detections(det_exp_path)
+        # Save metadata if all frames are saved
+        if cfg.save_objects_all_frames:
+            save_meta_path = obj_all_frames_out_path / f"meta.pkl.gz"
+            with gzip.open(save_meta_path, "wb") as f:
+                pickle.dump(
+                    {
+                        'cfg': cfg,
+                        'class_names': obj_classes.get_classes_arr(),
+                        'class_colors': obj_classes.get_class_color_dict_by_index(),
+                    }, f)
 
-    owandb.finish()
+        if run_detections:
+            if cfg.save_video:
+                save_video_detections(det_exp_path)
+
+        owandb.finish()
+
+    def _save_objects_result(
+            self, objects_info: List[Optional[segmentation_utils.ObjectInfo]]
+    ) -> None:
+        save_results_3d_path = os.path.join(self._results_3d_dir,
+                                            f"{self._frame_idx}.jpg")
+        point_clouds = [obj_info.pcd for obj_info in objects_info]
+        points_2d = [
+            np.asarray(obj_info.pcd.points)[:, :2]
+            for obj_info in objects_info
+            if obj_info is not None
+        ]
+        if self.args.debug_mode:
+            # debug visulize 시, 첫번째 mask는 전체 point cloud를 의미하기 때문에, None으로 설정
+            points_2d[0] = None
+        bbox_3ds = [
+            obj_info.bbox_3d
+            for obj_info in objects_info
+            if obj_info is not None
+        ]
+        bbox_2ds = [
+            obj_info.bbox_2d
+            for obj_info in objects_info
+            if obj_info is not None
+        ]
+        visualization_utils.save_results_3d(self.vis,
+                                            self.view_control,
+                                            point_clouds,
+                                            bbox_3ds,
+                                            save_path=save_results_3d_path)
+        save_results_2d_path = os.path.join(self._results_2d_dir,
+                                            f"{self._frame_idx}.jpg")
+        visualization_utils.save_results_2d(points_2d,
+                                            bbox_2ds,
+                                            save_path=save_results_2d_path)
+
+    def _publish_2d_bounding_boxes(
+            self, objects_info: List[Optional[segmentation_utils.ObjectInfo]]
+    ) -> None:
+        bounding_boxes = BoundingBox2DArray()
+        for object_info in objects_info:
+            if object_info is None:
+                continue
+            bbox = BoundingBox2D()
+            bbox.center.position.x = object_info.bbox_2d.center[0]
+            bbox.center.position.y = object_info.bbox_2d.center[1]
+            bbox.center.theta = object_info.bbox_2d.center[2]
+            bbox.size_x = object_info.bbox_2d.width
+            bbox.size_y = object_info.bbox_2d.height
+            bounding_boxes.boxes.append(bbox)
+        self.bounding_boxes_pub.publish(bounding_boxes)
+
+    def _get_pose_data(self) -> Optional[np.ndarray]:
+        try:
+            camera_transform = self._tf_buffer.lookup_transform(
+                target_frame=self._target_frame,
+                source_frame=self._source_frame,
+                time=rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.3))
+            print("camera_transform:", camera_transform)
+            camera_pose = self._transform_stamped_to_matrix(camera_transform)
+            return camera_pose
+        except LookupException:
+            print("[pose tf listener]LookupException")
+        except ConnectivityException:
+            print("[pose tf listener]ConnectivityException")
+        except ExtrapolationException:
+            print("[pose tf listener]ExtrapolationException")
+        return
+
+    def rgb_callback(self, msg: CompressedImage) -> np.ndarray:
+        # 메시지에서 이미지 데이터를 읽어서 OpenCV 이미지로 변환
+        np_array = np.frombuffer(msg.data, np.uint8)
+        rgb_array = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+
+        # # publisher가 BGR 순서의 이미지를 보내고 있음.
+        # # frombuffer를 사용하면,
+        # # 바이너리 데이터를 복사하지 않고, 직접 배열로 변환할 수 있어 메모리 사용량을 최소화
+        # rgb_array = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
+        return rgb_array
+
+    def color_camera_info_callback(
+            self, msg: CameraInfo) -> Tuple[np.ndarray, np.ndarray]:
+        # get distortion coefficients and camera matrix.
+        dist_coeffs = np.array(msg.d)  # (5,)
+        camera_matrix = np.array(msg.k).reshape(3, 3)
+        """
+self.rgb_camera_matrix: [[     301.56           0      214.37]
+ [          0       300.9      121.26]
+ [          0           0           1]]
+self.rgb_dist_coeffs: [          0           0           0           0           0]
+
+        """
+        self.rgb_camera_matrix = camera_matrix
+        self.rgb_dist_coeffs = dist_coeffs
+        return camera_matrix, dist_coeffs
+
+    def depth_camera_info_callback(
+            self, msg: CameraInfo) -> Tuple[np.ndarray, np.ndarray]:
+        # get distortion coefficients and camera matrix.
+        dist_coeffs = np.array(msg.d)  # (5,) # TODO: 전부 0으로 나오므로, 의미가 없음.
+        camera_matrix = np.array(msg.k).reshape(3, 3)
+        """
+self.intrinsic: [[     209.05           0      212.36]
+ [          0      209.05      118.82]
+ [          0           0           1]]        
+        """
+        self.intrinsic = camera_matrix
+        """
+self.depth_dist_coeffs: [          0           0           0           0           0]
+        """
+        self.depth_dist_coeffs = dist_coeffs
+        return camera_matrix, dist_coeffs
+
+    def depth_callback(self,
+                       msg: CompressedImage,
+                       rescale_depth: float = 4.) -> np.ndarray:
+        # np_array = np.frombuffer(msg.data, np.uint8)
+        # depth_array = cv2.imdecode(np_array, cv2.IMREAD_ANYDEPTH)
+        # TODO: check
+        img = np.ndarray(shape=(1, len(msg.data)),
+                         dtype="uint8",
+                         buffer=msg.data)
+        img = cv2.imdecode(img, cv2.IMREAD_ANYCOLOR) * rescale_depth / 255.0
+        return img
+
+@hydra.main(version_base=None, config_path="../hydra_configs/", config_name="rerun_realtime_mapping")
+def main(cfg: DictConfig):
+    # ROS2 초기화
+    rclpy.init()
+    ros2_bridge = None
+    try:
+        ros2_bridge = RealtimeHumanSegmenterNode(cfg)
+        rclpy.spin(ros2_bridge)
+    except:
+        traceback.print_exc()
+        if ros2_bridge is not None:
+            ros2_bridge.wrap_up()
+            visualization_utils.merge_images(ros2_bridge._mask_images_dir,
+                                             ros2_bridge._results_3d_dir,
+                                             ros2_bridge._results_2d_dir)
+            ros2_bridge.vis.destroy_window()
+            ros2_bridge.destroy_node()
+            rclpy.shutdown()
+            visualization_utils.create_gif_from_images()
+
+
+
 
 
 if __name__ == "__main__":
+    # TODO: yaml로 옮겨야 함
+    parser = argparse.ArgumentParser(
+        description="RealtimeHumanSegmenterNode Node")
+    parser.add_argument('--realsense_idx',
+                        type=int,
+                        default=0,
+                        help="Robot ID for the RealtimeHumanSegmenterNode Node")
+    parser.add_argument('--use_world_model',
+                        type=bool,
+                        default=False,
+                        help="Use YOLO-World model for detection")
+    parser.add_argument('--debug_mode',
+                        type=bool,
+                        default=False,
+                        help="Save the results to debug")
+    parser.add_argument('--min_points_threshold',
+                        type=int,
+                        default=16,
+                        help="Minimum number of points required for an object")
+    parser.add_argument('--conf',
+                        type=float,
+                        default=0.2,
+                        help="Confidence threshold for detection")
+    parser.add_argument(
+        '--obj_pcd_max_points',
+        type=int,
+        default=5000,
+        help="Maximum number of points in an object's point cloud")
+    parser.add_argument('--device',
+                        type=str,
+                        default='cpu',
+                        help="Device to use for computation (cpu or cuda)")
+    args = parser.parse_args()
     main()
+
+
+
+
+
+
+
+
+
+
