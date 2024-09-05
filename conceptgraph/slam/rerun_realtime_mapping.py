@@ -227,13 +227,14 @@ def main(cfg: DictConfig):
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # (H, W, 3)
 
             # Do initial object detection (YOLO world)
-            start_time = time.time()
-            # [1] detection
+
+            ##### 1. [시작] RGBD에서 instance segmentation 진행
             results = detection_model.predict(color_path,
                                               conf=0.1,
                                               verbose=False)
             confidences = results[0].boxes.conf.cpu().numpy()
-            detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(int)
+            detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(int) # (N,)
+            # detection_class_labels = [ "sofa chair 0", ... ]
             detection_class_labels = [
                 f"{obj_classes.get_classes_arr()[class_id]} {class_idx}"
                 for class_idx, class_id in enumerate(detection_class_ids)
@@ -251,19 +252,26 @@ def main(cfg: DictConfig):
                                                 verbose=False)
                 masks_tensor = sam_out[0].masks.data
 
-                masks_np = masks_tensor.cpu().numpy()
+                masks_np = masks_tensor.cpu().numpy() # (N, H, W)
             else:
                 masks_np = np.empty((0, *color_tensor.shape[:2]),
                                     dtype=np.float64)
-            # Create a detections object that we will save later
+            # Create a detections object that we will save later.
             curr_det = sv.Detections(
                 xyxy=xyxy_np,
                 confidence=confidences,
                 class_id=detection_class_ids,
                 mask=masks_np,
             )
-            # important finish
+            ##### 1. [끝] RGBD에서 instance segmentation 진행
+
+
+
             # Make the edges
+            # detection_class_labels: ["sofa chair 0", ...]
+            print("det_exp_vis_path:", det_exp_vis_path)
+            print("color_path:", color_path)
+            print("cfg.make_edges:", cfg.make_edges)
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
                 image, curr_det, obj_classes, detection_class_labels,
                 det_exp_vis_path, color_path, cfg.make_edges, openai_client)
