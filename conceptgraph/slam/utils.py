@@ -983,19 +983,11 @@ def filter_gobs(
 ):
     """
 위 함수 `filter_gobs`는 객체 감지 결과(`gobs`)에서 다양한 기준에 따라 객체를 필터링하는 역할
-    - 이를 통해 원치 않거나 품질이 낮은 감지 결과를 제거하고, 
-    - 더 유의미한 객체 감지 결과만 남겨 후속 처리에 사용
 
 ### 주요 기능과 역할:
-
-1. **감지 결과가 없는 경우 처리**:
-   - 함수는 먼저 `gobs`에 감지된 객체가 없는지 확인합니다. 
-   - 만약 감지된 객체가 없다면, 그대로 `gobs`를 반환하여 이후의 처리를 건너뜁니다.
-
 2. **필터링 기준 설정**:
-   - 다양한 필터링 기준을 설정하고, 각 기준에 따라 감지된 객체를 필터링합니다.
      - **마스크 면적**: 
-        - 마스크의 면적이 `mask_area_threshold`보다 작은 객체는 필터링
+        - 마스크의 면적이 `mask_area_threshold`보다 작은 객체는 필터링 ( 25 )
      - **배경 클래스 필터링**: 
         - `skip_bg`가 활성화된 경우, 배경 클래스(`BG_CLASSES`)에 속하는 객체는 필터링
      - **경계 상자 면적 비율**: 
@@ -1019,6 +1011,25 @@ def filter_gobs(
 6. **필터링된 결과 반환**:
    - 최종적으로 필터링된 감지 결과를 포함하는 `gobs`를 반환합니다. 
         이 결과는 품질이 낮거나 원치 않는 감지 결과가 제거된 상태입니다.
+
+
+            results = {
+                # add new uuid for each detection
+                "xyxy": curr_det.xyxy,  # (34, 4)
+                "confidence": curr_det.confidence,  # (34,)
+                "class_id": curr_det.class_id,  # (34,)
+                "mask": curr_det.mask,  # (34, 680, 1200)
+                "classes":
+                    obj_classes.get_classes_arr(),  # len = 200, "alarm clock"
+                "image_crops": image_crops,  # len = 34, <PIL.Image.Image>
+                "image_feats": image_feats,  # (34, 1024)
+                "text_feats": text_feats,  # len = 0 # 아마?
+                "detection_class_labels":
+                    detection_class_labels,  # len = 34, "sofa chair 0"
+                "labels": labels,  # len = 19, "sofa chair 0"
+                "edges": edges,  # len = 0
+                "captions": captions,  # len = 0
+            }
     """
     # If no detection at all
     if len(gobs['xyxy']) == 0:
@@ -1139,21 +1150,21 @@ image: (H, W, 3)
 
 # @profile
 def gobs_to_detection_list(
-    image,
-    depth_array,
-    cam_K,
-    idx,
-    gobs,
-    trans_pose = None,
-    class_names = None,
-    BG_CLASSES  = None,
-    color_path = None,
-    min_points_threshold: int = None,
-    spatial_sim_type: str = None,
-    downsample_voxel_size: float = None,  # New parameter
-    dbscan_remove_noise: bool = None,     # New parameter
-    dbscan_eps: float = None,             # New parameter
-    dbscan_min_points: int = None         # New parameter
+        image,
+        depth_array,
+        cam_K,
+        idx,
+        gobs,
+        trans_pose=None,
+        class_names=None,
+        BG_CLASSES=None,
+        color_path=None,
+        min_points_threshold: int = None,
+        spatial_sim_type: str = None,
+        downsample_voxel_size: float = None,  # New parameter
+        dbscan_remove_noise: bool = None,  # New parameter
+        dbscan_eps: float = None,  # New parameter
+        dbscan_min_points: int = None  # New parameter
 ):
     '''
     Return a DetectionList object from the gobs
@@ -1186,16 +1197,15 @@ def gobs_to_detection_list(
         local_class_id = gobs['class_id'][mask_idx]
         mask = gobs['mask'][mask_idx]
         class_name = gobs['classes'][local_class_id]
-        global_class_id = -1 if class_names is None else class_names.index(class_name)
+        global_class_id = -1 if class_names is None else class_names.index(
+            class_name)
 
         # make the pcd and color it
-        camera_object_pcd = create_object_pcd(
-            depth_array,
-            mask,
-            cam_K,
-            image,
-            obj_color = None
-        )
+        camera_object_pcd = create_object_pcd(depth_array,
+                                              mask,
+                                              cam_K,
+                                              image,
+                                              obj_color=None)
 
         # It at least contains 5 points
         if len(camera_object_pcd.points) < max(min_points_threshold, 5):
@@ -1208,11 +1218,16 @@ def gobs_to_detection_list(
 
         # get largest cluster, filter out noise
         # global_object_pcd = process_pcd(global_object_pcd, cfg)
-        global_object_pcd = process_pcd(global_object_pcd, downsample_voxel_size, dbscan_remove_noise, dbscan_eps, dbscan_min_points, run_dbscan=True)
+        global_object_pcd = process_pcd(global_object_pcd,
+                                        downsample_voxel_size,
+                                        dbscan_remove_noise,
+                                        dbscan_eps,
+                                        dbscan_min_points,
+                                        run_dbscan=True)
 
         # pcd_bbox = get_bounding_box(cfg, global_object_pcd)
         pcd_bbox = get_bounding_box(spatial_sim_type, global_object_pcd)
-        pcd_bbox.color = [0,1,0]
+        pcd_bbox.color = [0, 1, 0]
 
         if pcd_bbox.volume() < 1e-6:
             continue
@@ -1220,20 +1235,21 @@ def gobs_to_detection_list(
         # Treat the detection in the same way as a 3D object
         # Store information that is enough to recover the detection
         detected_object = {
-            'id' : uuid.uuid4(),
-            'image_idx' : [idx],                             # idx of the image
-            'mask_idx' : [mask_idx],                         # idx of the mask/detection
-            'color_path' : [color_path],                     # path to the RGB image
-            'class_name' : [class_name],                         # global class id for this detection
-            'class_id' : [global_class_id],                         # global class id for this detection
-            'num_detections' : 1,                            # number of detections in this object
+            'id': uuid.uuid4(),
+            'image_idx': [idx],  # idx of the image
+            'mask_idx': [mask_idx],  # idx of the mask/detection
+            'color_path': [color_path],  # path to the RGB image
+            'class_name': [class_name],  # global class id for this detection
+            'class_id': [global_class_id],  # global class id for this detection
+            'num_detections': 1,  # number of detections in this object
             'mask': [mask],
             'xyxy': [gobs['xyxy'][mask_idx]],
             'conf': [gobs['confidence'][mask_idx]],
             'n_points': [len(global_object_pcd.points)],
             'pixel_area': [mask.sum()],
-            'contain_number': [None],                          # This will be computed later
-            "inst_color": np.random.rand(3),                 # A random color used for this segment instance
+            'contain_number': [None],  # This will be computed later
+            "inst_color": np.random.rand(
+                3),  # A random color used for this segment instance
             'is_background': class_name in BG_CLASSES,
 
             # These are for the entire 3D object

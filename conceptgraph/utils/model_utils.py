@@ -3,6 +3,7 @@ from conceptgraph.utils.general_utils import measure_time
 # from line_profiler import profile
 # from segment_anything import sam_model_registry, SamPredictor, SamAutomaticMaskGenerator
 import numpy as np
+from typing import List, Tuple
 import torch
 from PIL import Image
 from scipy.spatial.distance import cosine
@@ -137,10 +138,37 @@ def compute_clip_features(image, detections, clip_model, clip_preprocess,
 
 
 # @profile
-def compute_clip_features_batched(image, detections, clip_model,
-                                  clip_preprocess, clip_tokenizer, classes,
-                                  device):
+def compute_clip_features_batched(
+        image, detections, clip_model, clip_preprocess, clip_tokenizer, classes,
+        device) -> Tuple[List[Image.Image], np.ndarray, List]:
+    """
+### 1. **주요 역할**
+- 입력된 이미지에서 **탐지된 객체들을 잘라냄**.
+- 잘라낸 이미지 조각들에 대해 **CLIP 이미지 임베딩(특징 벡터)**을 계산
 
+### 2. **세부 알고리즘 로직**
+
+1. **이미지 전처리 및 패딩 적용**:
+   - 잘라낼 때 객체 주변에 **패딩**을 적용하여,
+        - 객체가 경계에 너무 가까이 있는 경우 시각적인 정보가 손실되지 않도록 합니다.
+
+2. **CLIP 모델을 위한 전처리**:
+   - 잘라낸 각 객체 이미지에 대해 **CLIP 모델**의 전처리 과정을 거칩니다. 이는 CLIP 모델이 요구하는 형식으로 이미지를 변환하는 과정입니다.
+   - 변환된 이미지를 **배치(batch)** 형태로 묶어 한 번에 처리할 수 있도록 준비합니다.
+
+3. **이미지 임베딩 계산**:
+   - 준비된 이미지 배치를 **CLIP 모델**에 입력하여 각 이미지에 대한 **임베딩(특징 벡터)**을 계산합니다.
+   - 이 임베딩은 **고차원 벡터**로, 각 객체의 시각적 특징을 추상화한 값입니다.
+   - 계산된 임베딩 벡터는 **정규화(normalization)** 과정을 거쳐, 벡터의 크기를 일정하게 유지합니다.
+
+    Returns:
+        image_crops: List[Image.Image]
+            - 잘라낸 이미지들의 리스트
+        image_feats: np.ndarray
+            - 잘라낸 이미지들의 CLIP feature: shape (N, 512)
+        text_feats: List
+            - 빈 리스트
+    """
     image = Image.fromarray(image)
     padding = 20  # Adjust the padding amount as needed
 

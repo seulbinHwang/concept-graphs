@@ -258,13 +258,54 @@ def vlm_extract_object_captions(text: str):
 
 def get_obj_rel_from_image_gpt4v(client: OpenAI, image_path: str,
                                  label_list: list):
+    """
+이 함수는 **GPT-4 비전 모델(GPT-4V)**을 활용하여 이미지에서
+    **객체 간의 물리적 관계**를 분석하고 추출하는 기능을 수행
+특히, 이미지 내에서 객체들이 서로 **겹쳐져 있는지** 또는 **위아래로 쌓여 있는지**에 관한
+    **"on top of"** 또는 **"under"**와 같은 관계를 찾아내는 데 초점
+
+### 2. **세부 알고리즘 로직**
+
+1. **이미지 인코딩**:
+   - 함수는 먼저 주어진 이미지를 **Base64** 형식으로 인코딩
+   - 이를 통해 GPT-4V가 이미지를 처리할 수 있음
+
+2. **시스템 프롬프트 설정**:
+   - 함수는 **GPT-4V 모델**에 전달될 시스템 프롬프트를 미리 정의
+     - 이 프롬프트는 모델이 수행해야 할 작업을 명확히 설명해 줍니다.
+   - 이 경우, 프롬프트는 **객체 간의 물리적 관계**(특히 "on top of"와 "under")만 분석하도록 명령
+
+3. **사용자 쿼리 생성**:
+   - 함수는 이미지와 함께 객체의 **라벨 목록**을 제공
+        라벨 목록에는 이미지 내에서 탐지된 각 객체의 **고유 숫자 ID**와 그 **이름**이 포함
+   - 예를 들어, "1: 의자", "2: 책상"과 같은 형식의 목록이 주어지며,
+        - 이 정보가 모델이 객체 간 관계를 분석할 때 사용
+
+4. **GPT-4V API 호출 및 응답 처리**:
+   - OpenAI의 GPT-4V API가 호출되어, 이미지와 라벨 목록을 입력으로 받아 **객체 간의 관계**를 추론
+   - 추론된 관계는 주어진 형식대로 **숫자 ID로 표현된 튜플**의 리스트로 반환
+        [("1", "on top of", "2"), ("3", "under", "2")]
+
+5. **관계 추출 및 오류 처리**:
+   - 모델에서 반환된 결과는 함수가 **텍스트에서 튜플 형식으로 추출**하여 처리
+   - 만약 API 호출 중 오류가 발생하면,
+        - 빈 리스트가 반환되어 안전하게 작동할 수 있도록 **예외 처리**가 포함되어 있음
+
+6. **결과 반환**:
+   - 함수는 최종적으로 추출된 **객체 간의 관계** 리스트를 반환
+     - 이 리스트는 **객체 ID**와 **관계 유형("on top of", "under")**으로 구성된 튜플 형태
+    """
     # Getting the base64 string
     base64_image = encode_image_for_openai(image_path)
 
     global system_prompt
     global gpt_model
 
-    user_query = f"Here is the list of labels for the annotations of the objects in the image: {label_list}. Please describe the spatial relationships between the objects in the image."
+    user_query = (
+        f"Here is the list of labels for the annotations of the objects "
+        f"in the image: {label_list}. "
+        f"Please describe the spatial relationships between "
+        f"the objects in the image.")
 
     vlm_answer = []
     try:
@@ -304,6 +345,43 @@ def get_obj_rel_from_image_gpt4v(client: OpenAI, image_path: str,
 
 def get_obj_captions_from_image_gpt4v(client: OpenAI, image_path: str,
                                       label_list: list):
+    """
+이 함수는 **GPT-4 비전 모델(GPT-4V)**을 사용하여
+    이미지에서 탐지된 객체에 대한 **간결한 설명(캡션)**을 생성
+함수는 이미지에 있는 객체의 숫자 ID와 라벨 목록을 입력받아,
+    각 객체를 분석한 후 **정확한 캡션**을 반환
+
+### 1. **주요 역할**
+- 이미지 속 **객체들에 대한 설명을 자동으로 생성**하는 것이 핵심
+- 탐지된 객체에 대해 **객체 ID, 이름, 그리고 해당 객체에 대한 간결한 설명**을 포함한 목록을 반환
+
+### 2. **세부 알고리즘 로직**
+
+2. **시스템 프롬프트 설정**:
+   - **GPT-4V**가 해야 할 작업을 정의하는 **프롬프트**를 설정합니다.
+   이 프롬프트는 모델이 이미지 속 객체에 대해 간결하고 정확한 설명을 생성하도록 유도
+
+3. **사용자 쿼리 생성**:
+   - 탐지된 객체 목록(객체 ID 및 이름)을 포함한 쿼리를 생성하여 모델에 전달
+   - 여기서 객체의 이름은 **객체 탐지 시스템**으로부터 얻은 정보이지만,
+     - 정확하지 않을 수 있기 때문에 모델이 이를 기반으로 **객체 설명을 생성**
+
+4. **GPT-4V API 호출 및 응답 처리**:
+   - OpenAI의 **GPT-4V** 모델을 호출하여,
+        - 이미지와 객체 라벨을 기반으로 각 객체에 대한 **설명을 생성**
+   - 반환된 결과는
+        - **Python 딕셔너리**의 리스트 형태
+         - 각 객체에 대해 ID, 이름, 그리고 해당 객체의 설명이 포함된 딕셔너리
+
+5. **오류 처리 및 결과 반환**:
+   - API 호출 중 오류가 발생할 경우, 빈 리스트를 반환하도록 예외 처리가 되어 있습니다.
+   - 함수는 최종적으로 각 객체에 대한 **ID, 이름, 캡션**을 포함한 리스트를 반환합니다.
+
+[
+    {"id": "1", "name": "object1", "caption": "concise description of object1"},
+    {"id": "2", "name": "object2", "caption": "concise description of object2"}
+]
+    """
     # Getting the base64 string
     base64_image = encode_image_for_openai(image_path)
 

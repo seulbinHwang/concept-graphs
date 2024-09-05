@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 import pickle
 import gzip
+from typing import List, Dict, Any
 
 # Third-party imports
 import cv2
@@ -235,7 +236,8 @@ def main(cfg: DictConfig):
                                               conf=0.1,
                                               verbose=False)
             confidences = results[0].boxes.conf.cpu().numpy()
-            detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(int) # (N,)
+            detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
+                int)  # (N,)
             # detection_class_labels = [ "sofa chair 0", ... ]
             detection_class_labels = [
                 f"{obj_classes.get_classes_arr()[class_id]} {class_idx}"
@@ -254,7 +256,7 @@ def main(cfg: DictConfig):
                                                 verbose=False)
                 masks_tensor = sam_out[0].masks.data
 
-                masks_np = masks_tensor.cpu().numpy() # (N, H, W)
+                masks_np = masks_tensor.cpu().numpy()  # (N, H, W)
             else:
                 masks_np = np.empty((0, *color_tensor.shape[:2]),
                                     dtype=np.float64)
@@ -267,23 +269,50 @@ def main(cfg: DictConfig):
             )
             ##### 1. [끝] RGBD에서 instance segmentation 진행
 
-
-
             # Make the edges
             # detection_class_labels: ["sofa chair 0", ...]
-
             # det_exp_path:
-            # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10
+            # Datasets/Replica/room0/exps/s_detections_stride10
             # det_exp_vis_path:
-            # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10/vis
-            print("det_exp_vis_path:", det_exp_vis_path)
-            print("color_path:", color_path)
-            print("cfg.make_edges:", cfg.make_edges)
-            raise NotImplementedError
+            # Datasets/Replica/room0/exps/s_detections_stride10/vis
+            # color_path
+            # Datasets/Replica/room0/results/frame000000.jpg
+            # cfg.make_edges: True
+            """ make_vlm_edges_and_captions
+            labels: ["sofa chair 0", ...]
+            edges: [("1", "on top of", "2"), ("3", "under", "2"), ...]
+                - 현 코드로는 []
+            edge_image: <PIL.Image.Image> node와 edge가 그려진 이미지
+                - 현 코드로는 node만 그려진다.
+            captions: 
+[
+    {"id": "1", "name": "object1", "caption": "concise description of object1"},
+    {"id": "2", "name": "object2", "caption": "concise description of object2"}
+]
+                - 현 코드로는 []
+            로직
+                - segmentation이 끝난 이미지 1장을 VLM에 넣어서
+                  - 바로 edge 정보를 구한다.
+                  - 바로 node의 caption 정보를 구한다.
+                    - 이미 segmentation label이 있지만, 
+                        - 부정확할 수 있으므로 VLM을 통해 caption을 구한다고 한다.
+            """
+
+            ##### 6. [시작] VLM을 통해 edge와 caption 정보를 구한다.
+            ##### 논문과 다르게, 현 이미지 1장에 대한 edge와 node caption 정보를 구한다.
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
                 image, curr_det, obj_classes, detection_class_labels,
                 det_exp_vis_path, color_path, cfg.make_edges, openai_client)
-
+            del edge_image
+            ##### 6. [끝] VLM을 통해 edge와 caption 정보를 구한다.
+            """
+        image_crops: List[Image.Image]
+            - 잘라낸 이미지들의 리스트
+        image_feats: np.ndarray
+            - 잘라낸 이미지들의 CLIP feature: shape (N, 512)
+        text_feats: List
+            - 빈 리스트
+            """
             image_crops, image_feats, text_feats = compute_clip_features_batched(
                 image_rgb, curr_det, clip_model, clip_preprocess,
                 clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
@@ -315,14 +344,22 @@ def main(cfg: DictConfig):
             # save the detections if needed
             # important
             if cfg.save_detections:
-
+                # det_exp_vis_path:
+                # Datasets/Replica/room0/exps/s_detections_stride10/vis
+                # color_path
+                # Datasets/Replica/room0/results/frame000000.jpg
+                # vis_save_path:
+                # Datasets/Replica/room0/exps/s_detections_stride10/vis/frame000000.jpg
+                """
+                vis_save_path: bounding box와 mask가 모두 그려진 이미지
+                
+                """
                 vis_save_path = (det_exp_vis_path /
                                  color_path.name).with_suffix(".jpg")
                 # Visualize and save the annotated image
                 annotated_image, labels = vis_result_fast(
                     image, curr_det, obj_classes.get_classes_arr())
                 cv2.imwrite(str(vis_save_path), annotated_image)
-
                 depth_image_rgb = cv2.normalize(depth_array, None, 0, 255,
                                                 cv2.NORM_MINMAX)
                 depth_image_rgb = depth_image_rgb.astype(np.uint8)
@@ -338,7 +375,6 @@ def main(cfg: DictConfig):
                     depth_image_rgb)
                 save_detection_results(det_exp_pkl_path / vis_save_path.stem,
                                        results)
-            # important finish
         else:
             # Support current and old saving formats
             print("color_path:", color_path)
@@ -356,12 +392,14 @@ def main(cfg: DictConfig):
                     f"No detections found for frame {frame_idx}at paths \n{det_exp_pkl_path / color_path.stem} or \n{det_exp_pkl_path / f'{int(color_path.stem):06}'}."
                 )
 
+        ########
+
         # get pose, this is the untrasformed pose.
         unt_pose = dataset.poses[frame_idx]
-        unt_pose = unt_pose.cpu().numpy()
+        unt_pose = unt_pose.cpu().numpy()  # (4, 4)
 
         # Don't apply any transformation otherwise
-        adjusted_pose = unt_pose
+        adjusted_pose = unt_pose  # (4, 4)
         # orr = Optional re-run
         prev_adjusted_pose = orr_log_camera(intrinsics, adjusted_pose,
                                             prev_adjusted_pose, cfg.image_width,
@@ -372,10 +410,39 @@ def main(cfg: DictConfig):
         orr_log_depth_image(depth_tensor)
         orr_log_vlm_image(vis_save_path_for_vlm)
         orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
-
-        # [3] resize the grounded observations
+        """
+            results = {
+                # add new uuid for each detection
+                "xyxy": curr_det.xyxy,  # (34, 4)
+                "confidence": curr_det.confidence,  # (34,)
+                "class_id": curr_det.class_id,  # (34,)
+                "mask": curr_det.mask,  # (34, 680, 1200)
+                "classes":
+                    obj_classes.get_classes_arr(),  # len = 200, "alarm clock"
+                "image_crops": image_crops,  # len = 34, <PIL.Image.Image>
+                "image_feats": image_feats,  # (34, 1024)
+                "text_feats": text_feats,  # len = 0 # 아마?
+                "detection_class_labels":
+                    detection_class_labels,  # len = 34, "sofa chair 0"
+                "labels": labels,  # len = 19, "sofa chair 0"
+                "edges": edges,  # len = 0
+                "captions": captions,  # len = 0
+            }
+        image_rgb: (H, W, 3)
+        """
         resized_grounded_obs = resize_gobs(raw_grounded_obs, image_rgb)
         # [4] filter the observations
+        """
+2. **필터링 기준 설정**:
+     - **마스크 면적**: 
+        - 마스크의 면적이 `mask_area_threshold`보다 작은 객체는 필터링 ( 25 )
+     - **배경 클래스 필터링**: 
+        - `skip_bg`가 활성화된 경우, 배경 클래스(`BG_CLASSES`)에 속하는 객체는 필터링
+     - **경계 상자 면적 비율**: 
+        - 경계 상자 면적이 이미지의 `max_bbox_area_ratio(0.5)`를 초과하는 객체는 필터링
+     - **신뢰도 필터링**: 
+        - 객체의 신뢰도가 `mask_conf_threshold`보다 낮은 경우 해당 객체는 필터링
+        """
         filtered_grounded_obs = filter_gobs(
             resized_grounded_obs,
             image_rgb,
@@ -403,17 +470,18 @@ image_rgb.shape: (680, 1200, 3)
 adjusted_pose.shape: (4, 4)
         """
 
-        obj_pcds_and_bboxes = measure_time(detections_to_obj_pcd_and_bbox)(
-            depth_array=depth_array,
-            masks=grounded_obs['mask'],
-            cam_K=intrinsics.cpu().numpy()[:3, :3],  # Camera intrinsics
-            image_rgb=image_rgb,
-            trans_pose=adjusted_pose,
-            min_points_threshold=cfg.min_points_threshold,  # 16
-            spatial_sim_type=cfg.spatial_sim_type,  # overlap
-            obj_pcd_max_points=cfg.obj_pcd_max_points,  # 5000
-            device=cfg.device,
-        )
+        obj_pcds_and_bboxes: List[Dict[str, Any]] = measure_time(
+            detections_to_obj_pcd_and_bbox)(
+                depth_array=depth_array,
+                masks=grounded_obs['mask'],
+                cam_K=intrinsics.cpu().numpy()[:3, :3],  # Camera intrinsics
+                image_rgb=image_rgb,
+                trans_pose=adjusted_pose,
+                min_points_threshold=cfg.min_points_threshold,  # 16
+                spatial_sim_type=cfg.spatial_sim_type,  # overlap
+                obj_pcd_max_points=cfg.obj_pcd_max_points,  # 5000
+                device=cfg.device,
+            )
 
         for obj in obj_pcds_and_bboxes:
             if obj:

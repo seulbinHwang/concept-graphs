@@ -487,6 +487,7 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes,
             - captions (list): List of captions for each detected object if `make_edges_flag` is True, otherwise None.
     """
     # Filter the detections
+    # labels: detection_class_labels가 필터링된 것: ["sofa chair 0", ...]
     filtered_detections, labels = filter_detections(
         image=image,
         detections=curr_det,
@@ -500,10 +501,19 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes,
     captions = []
     edge_image = None
     if make_edges_flag:
+        # det_exp_vis_path:
+        # Datasets/Replica/room0/exps/s_detections_stride10/vis
+        # color_path
+        # Datasets/Replica/room0/results/frame000000.jpg
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
             det_exp_vis_path, color_path)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
             det_exp_vis_path, color_path, w_edges=True)
+        """ annotate_for_vlm
+        이미지 위에 탐지된 객체들의 위치와 라벨을 오버레이(overlay)하는 방식으로 이루어짐
+        객체에 부여된 라벨들은 숫자와 함께 고유하게 표시되며, 
+            이를 OpenAI API에서 객체 관계를 파악하는 데 사용됨
+        """
         annotated_image_for_vlm, sorted_indices = annotate_for_vlm(
             image,
             filtered_detections,
@@ -521,19 +531,29 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes,
         cv2.imwrite(str(vis_save_path_for_vlm), annotated_image_for_vlm)
         print(f"Line 313, vis_save_path_for_vlm: {vis_save_path_for_vlm}")
         if openai_client:
-            edges = get_obj_rel_from_image_gpt4v(openai_client,
-                                                 vis_save_path_for_vlm, label_list)
-            captions = get_obj_captions_from_image_gpt4v(openai_client,
-                                                         vis_save_path_for_vlm,
-                                                         label_list)
-            edge_image = plot_edges_from_vlm(annotated_image_for_vlm,
-                                             edges,
-                                             filtered_detections,
-                                             obj_classes,
-                                             labels,
-                                             sorted_indices,
-                                             save_path=vis_save_path_for_vlm_edges)
-
+            # object들에 대한 관계 파악
+            # edges = [("1", "on top of", "2"), ("3", "under", "2"), ...]
+            edges: List[Tuple[str, str, str]] = get_obj_rel_from_image_gpt4v(
+                openai_client, vis_save_path_for_vlm, label_list)
+            # object에 대한 captions
+            """ captions
+[
+    {"id": "1", "name": "object1", "caption": "concise description of object1"},
+    {"id": "2", "name": "object2", "caption": "concise description of object2"}
+]
+            """
+            captions = get_obj_captions_from_image_gpt4v(
+                openai_client, vis_save_path_for_vlm, label_list)
+            # 탐지된 객체 간의 관계(엣지)를 이미지에 시각적으로 표시하는 작업입니다.
+            edge_image = plot_edges_from_vlm(
+                annotated_image_for_vlm,
+                edges,
+                filtered_detections,
+                obj_classes,
+                labels,
+                sorted_indices,
+                save_path=vis_save_path_for_vlm_edges)
+    # labels: detection_class_labels가 필터링된 것: ["sofa chair 0", ...]
     return labels, edges, edge_image, captions
 
 
@@ -704,7 +724,8 @@ class ObjectClasses:
         self.skip_bg = skip_bg
         self.classes, self.class_to_color = self._load_or_create_colors()
 
-    def _load_or_create_colors(self) -> Tuple[List[str], Dict[str, List[float]]]:
+    def _load_or_create_colors(
+            self) -> Tuple[List[str], Dict[str, List[float]]]:
         with open(self.classes_file_path, "r") as f:
             all_classes = [cls.strip() for cls in f.readlines()]
 

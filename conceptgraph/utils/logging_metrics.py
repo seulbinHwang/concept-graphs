@@ -21,6 +21,37 @@ class MappingTracker:
         return cls._instance
 
     def __init__(self):
+        """
+이 클래스는 **싱글톤 패턴**을 사용하여 객체를 추적하는 시스템을 구현한 것
+주요 목표는 **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
+이러한 데이터를 추적하고, 관련 작업을 수행하는 다양한 메서드를 제공
+
+### 1. **싱글톤 패턴 구현**
+   - `MappingTracker` 클래스는 **싱글톤 패턴**으로 설계되어, 오직 하나의 인스턴스만 생성
+        `__new__` 메서드를 통해 이미 생성된 인스턴스가 있으면 그 인스턴스를 반환하고, 없으면 새 인스턴스를 생성
+   - **초기화는 단 한 번**만 이루어지도록 `__initialized` 플래그를 사용하여 제어
+    이로 인해 여러 번 `__init__`이 호출되더라도, 최초 호출 시에만 초기화가 이루어집니다.
+
+### 2. **주요 데이터 추적**
+   클래스는 다음과 같은 데이터를 추적하고 관리합니다:
+   - **탐지된 객체 수**: `total_detections`
+   - **전체 객체 수**: `total_objects`
+   - **병합된 객체 수**: `total_merges`
+   - **병합된 객체 목록**: `merge_list`
+   - **클래스별 객체 수**: `curr_class_count`
+   - **이전 프레임의 객체 및 바운딩 박스 정보**: `prev_obj_names`, `prev_bbox_names`
+
+### 3. **주요 메서드**
+   - **데이터 증가**:
+`increment_total_detections`, `increment_total_objects`, `increment_total_merges` 등의 메서드는 해당 변수의 값을 입력된 만큼 증가시킵니다.
+   - **데이터 반환**:
+`get_total_detections`, `get_total_objects` 등의 메서드는 각 변수를 반환
+   - **데이터 설정**: `
+set_total_detections`, `set_total_objects` 등의 메서드는 변수를 특정 값으로 설정
+   - **병합 추적**:
+`track_merge`는 두 객체가 병합된 것을 기록하고,
+    이를 `merge_list`에 저장하며, `total_merges`를 증가시킴
+        """
         if not self.__initialized:
             self.curr_frame_idx = 0
             self.curr_object_count = 0
