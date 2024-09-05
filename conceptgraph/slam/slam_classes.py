@@ -23,7 +23,47 @@ def to_tensor(numpy_array, device=None):
 
 
 class DetectionList(list):
+    """
+이 클래스는 **`DetectionList`**라는 커스텀 리스트 클래스로, **객체 탐지 결과**를 효율적으로 관리하고 처리하는 기능을 제공합니다. 기본적인 리스트 기능을 확장하여, 각 객체 탐지 항목에 대한 다양한 연산과 시각적 처리를 지원하는 메서드를 추가한 것입니다.
 
+### 1. **주요 역할**
+- **탐지된 객체 데이터**를 리스트 형태로 관리하면서, 각 객체에 대해 **속성 값 추출**, **값 변환**, **색상 처리** 등을 수행합니다.
+- **객체 탐지 결과**를 처리하기 위한 **여러 가지 도구**를 제공합니다. 예를 들어, 각 탐지 객체의 속성 값을 추출하고, 이를 **배열 형태**(PyTorch 텐서 또는 Numpy 배열)로 변환하거나, 탐지된 객체를 **시각적으로 구별**할 수 있도록 색상을 적용할 수 있습니다.
+
+### 2. **세부 알고리즘 로직**
+
+1. **`get_values`**:
+   - 각 탐지 객체에서 특정 속성 값을 추출합니다.
+   - 인덱스가 주어지면 해당 인덱스의 값만 반환하고, 그렇지 않으면 전체 값을 반환합니다.
+
+2. **`get_stacked_values_torch`**:
+   - 각 객체의 속성 값을 추출하고, 이를 **PyTorch 텐서**로 변환한 후, **배치(batch)** 형태로 **스택(stack)**합니다.
+   - 속성 값이 **3D 바운딩 박스**일 경우, 그 값을 배열로 변환한 후 텐서로 변환합니다.
+
+3. **`get_stacked_values_numpy`**:
+   - `get_stacked_values_torch`에서 반환된 텐서를 **Numpy 배열**로 변환합니다.
+
+4. **리스트 확장 연산 (`__add__`, `__iadd__`)**:
+   - 두 개의 `DetectionList` 객체를 합쳐서 새로운 리스트를 반환하거나, 현재 리스트에 새로운 항목을 추가합니다.
+
+5. **부분 리스트 추출** (`slice_by_indices`, `slice_by_mask`):
+   - 주어진 **인덱스** 또는 **마스크**에 따라 리스트의 일부만 추출하여 새로운 리스트를 생성합니다.
+
+6. **`get_most_common_class`**:
+   - 각 탐지 객체에서 가장 많이 등장하는 **클래스**를 찾습니다. 예를 들어, 객체가 여러 클래스에 속할 수 있을 때 가장 빈번한 클래스를 반환합니다.
+
+7. **`color_by_most_common_classes`**:
+   - 탐지된 객체를 가장 많이 등장하는 클래스의 색상으로 **포인트 클라우드**와 **바운딩 박스**를 색칠합니다.
+   - 객체의 클래스에 따라 시각적으로 구분하기 위한 처리입니다.
+
+8. **`color_by_instance`**:
+   - 각 탐지 객체에 **고유한 색상**을 부여하여 시각적 구분을 합니다.
+   - 탐지 객체에 이미 색상이 있으면 이를 사용하고, 없으면 **색상 맵**을 이용해 자동으로 색상을 생성해 적용합니다.
+
+### 3. **결론**
+`DetectionList` 클래스는 탐지된 객체의 데이터를 효율적으로 관리하고, 각 객체의 속성 값을 **추출**, **변환**, **시각적 구분**을 제공하는 여러 기능을 추가한 확장 리스트입니다. 객체 간의 구분을 돕기 위해 **클래스별 색상 적용**이나 **객체별 색상 구분** 같은 시각적 처리를 쉽게 할 수 있게 설계되었습니다.
+
+    """
     def get_values(self, key, idx: int = None):
         if idx is None:
             return [detection[key] for detection in self]
@@ -31,6 +71,24 @@ class DetectionList(list):
             return [detection[key][idx] for detection in self]
 
     def get_stacked_values_torch(self, key, idx: int = None):
+        """
+**리스트 형태로 저장된 객체들**에서 특정한 **속성 값**(특히, 텐서로 변환 가능한 값)을 추출하고,
+이를 **PyTorch 텐서**로 변환해 **배치(batch) 형태로 스택**하는 역할
+    - 입력된 값이 **3D 바운딩 박스**일 경우,
+        - 이를 **Numpy 배열**로 변환한 후 **텐서**로 변환하는 작업을 수행
+
+### 2. **세부 로직**
+1. **객체 속성 값 추출**:
+   - 각 객체(`detection`)에서 **`key`에 해당하는 값**을 가져옴
+   - 만약 **인덱스(`idx`)**가 주어졌다면, 해당 인덱스에 맞는 값을 선택
+
+3. **Numpy 배열을 텐서로 변환**:
+   - 값이 **Numpy 배열**일 경우, 이를 **PyTorch 텐서**로 변환합니다.
+
+4. **텐서 스택**:
+   - 각 객체의 텐서를 모아서 **배치 형태**로 스택한 후, 이를 반환
+
+        """
         values = []
         for detection in self:
             v = detection[key]
@@ -38,7 +96,7 @@ class DetectionList(list):
                 v = v[idx]
             if isinstance(v, o3d.geometry.OrientedBoundingBox) or \
                 isinstance(v, o3d.geometry.AxisAlignedBoundingBox):
-                v = np.asarray(v.get_box_points())
+                v = np.asarray(v.get_box_points()) # (8, 3)
             if isinstance(v, np.ndarray):
                 v = torch.from_numpy(v)
             values.append(v)
@@ -118,7 +176,36 @@ class DetectionList(list):
 
 
 class MapObjectList(DetectionList):
+    """
+- 이 클래스는 **`MapObjectList`**라는 커스텀 리스트로, **`DetectionList`**를 확장한 것
+    - 추가 기능 제공
+        - **객체 데이터 관리**
+        - **유사도 계산**
+        - **객체 리스트의 직렬화 및 역직렬화**
+- 이 기능들은 객체 감지 후 데이터를 관리하고,
+    - 저장하거나 불러오는 데 필요한 작업을 효율적으로 처리할 수 있게 합니다.
 
+
+### 2. **세부 로직**
+
+1. **유사도 계산 (`compute_similarities`)**:
+   - 입력된 **특징 벡터(new_clip_ft)**와 리스트 내의 객체들의 **특징 벡터(clip_ft)** 간의
+        - **코사인 유사도**를 계산
+   - 입력이 Numpy 배열일 경우, 이를 **PyTorch 텐서**로 변환한 후 유사도를 계산
+   - 계산된 유사도는 각 객체와의 유사성을 나타내며, 이후 매칭이나 비교에 사용할 수 있음
+
+2. **객체 직렬화 (`to_serializable`)**:
+   - 객체 데이터를 **저장 가능한 형태**로 변환
+   - 3D 객체 정보(포인트 클라우드, 경계 상자 등)를 **Numpy 배열**로 변환하고, 이를 딕셔너리 형태로 저장
+   - 직렬화된 리스트는 "포인트 클라우드"와 "경계 상자"를 제외한
+        - 나머지 정보를 보존하며, 원본 데이터를 복원할 수 있도록 설계
+
+3. **객체 역직렬화 (`load_serializable`)**:
+   - 직렬화된 데이터를 사용해 객체 리스트를 **복원**
+   - 저장된 Numpy 배열을 **포인트 클라우드**와 **경계 상자**로 변환하고, 이를 원래 형태로 복원
+   - 복원된 데이터는 다시 객체 리스트로 추가
+
+    """
     def compute_similarities(self, new_clip_ft):
         '''
         The input feature should be of shape (D, ), a one-row vector

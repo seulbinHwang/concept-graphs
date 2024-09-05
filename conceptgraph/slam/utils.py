@@ -219,21 +219,27 @@ def init_pcd_denoise_dbscan(pcd: o3d.geometry.PointCloud,
 
 #### 주요 작업:
 1. **DBSCAN 클러스터링 (`cluster_dbscan`)**:
-   - `pcd.cluster_dbscan(eps=eps, min_points=min_points)`는 포인트 클라우드를 클러스터로 나누는 작업을 수행합니다. `eps`는 두 포인트 간의 최대 거리, `min_points`는 하나의 클러스터로 간주하기 위한 최소 포인트 수입니다.
-   - 이 작업은 포인트들을 유사한 공간적 위치에 따라 그룹화하며, 밀집되지 않은 포인트들은 노이즈로 간주합니다.
+   - `pcd.cluster_dbscan(eps=eps, min_points=min_points)`는 포인트 클라우드를
+        클러스터로 나누는 작업을 수행합니다.
+        `eps`는 두 포인트 간의 최대 거리, ( 0.1 m )
+        `min_points`는 하나의 클러스터로 간주하기 위한 최소 포인트 수 ( 10개 )
+   - 이 작업은 포인트들을 유사한 공간적 위치에 따라 그룹화하며, 밀집되지 않은 포인트들은 노이즈로 간주
 
 2. **클러스터의 라벨링**:
-   - `pcd_clusters`는 각 포인트가 속한 클러스터의 라벨을 포함하는 배열입니다. 라벨 `-1`은 노이즈로 간주되는 포인트를 나타냅니다.
+   - `pcd_clusters`는 각 포인트가 속한 클러스터의 라벨을 포함하는 배열
+        - 라벨 `-1`은 노이즈로 간주되는 포인트를 나타넴
 
 3. **가장 큰 클러스터 선택**:
-   - `Counter(pcd_clusters)`를 사용해 클러스터의 라벨을 세고, 가장 큰 클러스터의 라벨을 찾습니다.
-   - 가장 큰 클러스터에 속한 포인트들만 선택하여 새로운 포인트 클라우드를 생성합니다.
+   - `Counter(pcd_clusters)`를 사용해 클러스터의 라벨을 세고, 가장 큰 클러스터의 라벨을 찾음
+   - 가장 큰 클러스터에 속한 포인트들만 선택하여 새로운 포인트 클라우드를 생성
 
 4. **노이즈 제거**:
-   - 만약 가장 큰 클러스터의 포인트 수가 너무 작으면(기본적으로 5개 미만), 노이즈 제거 작업을 취소하고 원래의 포인트 클라우드를 반환합니다.
+   - 만약 가장 큰 클러스터의 포인트 수가 너무 작으면(기본적으로 5개 미만),
+        노이즈 제거 작업을 취소하고 원래의 포인트 클라우드를 반환
 
 5. **새로운 포인트 클라우드 생성**:
-   - 선택된 포인트들로 새로운 `PointCloud` 객체를 생성하여 반환합니다. 이 포인트 클라우드는 노이즈가 제거된, 더 정제된 형태입니다.
+   - 선택된 포인트들로 새로운 `PointCloud` 객체를 생성하여 반환
+        이 포인트 클라우드는 노이즈가 제거된, 더 정제된 형태
 
     """
     ## Remove noise via clustering
@@ -284,9 +290,9 @@ def init_pcd_denoise_dbscan(pcd: o3d.geometry.PointCloud,
 def init_process_pcd(
         pcd,
         downsample_voxel_size,  # 0.01
-        dbscan_remove_noise,
-        dbscan_eps,
-        dbscan_min_points,
+        dbscan_remove_noise, # True
+        dbscan_eps, # 0.1
+        dbscan_min_points, # 10
         run_dbscan=True):
     """
 이 함수는 주어진 포인트 클라우드(pcd)를 다운샘플링하고,
@@ -304,19 +310,19 @@ def init_process_pcd(
 
 voxel_down_sample(voxel_size=downsample_voxel_size)
     포인트 클라우드를 지정된 voxel 크기에 따라 다운샘플링하여, 포인트의 수를 줄이는 과정
-    이 과정은 포인트 클라우드를 간략화하고, 메모리 사용량을 줄이는 데 도움을 줍니다.
+    이 과정은 포인트 클라우드를 간략화하고, 메모리 사용량을 줄이는 데 도움
     downsample_voxel_size # meter scale
 
 init_pcd_denoise_dbscan 함수를 호출하여 DBSCAN 클러스터링을 이용해 노이즈를 제거
     이 작업은 포인트 클라우드에서 가장 큰 클러스터만 남기고,
     작은 클러스터(노이즈로 간주)를 제거하는 역할
     """
-    pcd = pcd.voxel_down_sample(voxel_size=downsample_voxel_size)
+    pcd = pcd.voxel_down_sample(voxel_size=downsample_voxel_size) # 1 cm 인듯
 
     if dbscan_remove_noise and run_dbscan:
         pcd = init_pcd_denoise_dbscan(pcd,
-                                      eps=dbscan_eps,
-                                      min_points=dbscan_min_points)
+                                      eps=dbscan_eps, # 0.1
+                                      min_points=dbscan_min_points) # 10
 
     return pcd
 
@@ -366,16 +372,35 @@ def merge_obj2_into_obj1(obj1,
                          device,
                          run_dbscan=True):
     '''
-    Merges obj2 into obj1 with structured attribute handling, including explicit checks for unhandled keys.
+    obj1: matched_obj
+    obj2: detected_obj
 
-    Parameters:
-    - obj1, obj2: Objects to merge.
-    - downsample_voxel_size, dbscan_remove_noise, dbscan_eps, dbscan_min_points, spatial_sim_type: Parameters for point cloud processing.
-    - device: Computation device.
-    - run_dbscan: Whether to run DBSCAN for noise removal.
+### 1. **주요 역할**
+- **객체 병합**: 두 개의 객체를 하나로 병합하는데, 각 속성에 대해 **병합 규칙**을 적용하여 처리
+- **포인트 클라우드**와 **경계 상자**(bounding box)를 병합하고, 필요한 속성은 **재계산**
+- 병합된 객체의 **특징 벡터(clip_ft)**를 가중 평균화하여 업데이트
 
-    Returns:
-    - obj1: Updated object after merging.
+### 2. **세부 알고리즘 로직**
+
+1. **속성 처리 규칙**:
+   - **`extend_attributes`**:
+        - 리스트 형태의 속성은 `obj2(detected_obj)`의 값을 `obj1`의 리스트에 **추가(extend)**
+        - 예를 들어, 이미지 인덱스나 마스크 정보는 병합된 객체에 포함되도록 추가
+   - **`add_attributes`**: 정수형 속성은 `obj2(detected_obj)`의 값을 `obj1`에 **더함**.
+        - 예를 들어, 객체의 탐지 횟수나 클래스 내 객체 수는 병합된 후 합산
+   - **`skip_attributes`**:
+        - 무시해야 할 속성들은 처리하지 않습니다.
+        - 예를 들어, 객체의 고유 ID나 색상은 `obj1`의 값만 유지
+
+2. **포인트 클라우드와 경계 상자 병합**:
+   - **포인트 클라우드**(`pcd`)는 두 객체의 포인트 클라우드를 합쳐서 **병합**하고,
+        중복되는 포인트나 노이즈를 제거하기 위해 **DBSCAN 알고리즘** 등을 사용하여 **후처리**
+   - 병합된 포인트 클라우드를 기반으로 **경계 상자(bbox)**를 다시 계산하여 업데이트
+
+3. **특징 벡터(clip_ft) 병합**:
+   - 각 객체의 **특징 벡터**는 객체의 탐지 횟수에 기반해 **가중 평균**으로 병합
+   이후, 병합된 특징 벡터는 **정규화**(normalization)를 통해 값의 범위를 일정하게 유지
+
     '''
     global tracker
 
@@ -1302,55 +1327,33 @@ def transform_detection_list(
 def make_detection_list_from_pcd_and_gobs(obj_pcds_and_bboxes, gobs, color_path,
                                           obj_classes, image_idx):
     """
-3D 포인트 클라우드와 Grounded Observations (gobs)을 사용하여
-    객체 감지 리스트를 생성하는 역할을 합니다.
-이 함수는 특정 이미지 프레임에서 감지된 객체들의 정보를 효율적으로 관리할 수 있는 구조로 변환하여,
-    후속 처리 단계에서 사용할 수 있도록 합니다.
+이 함수는 **3D 포인트 클라우드**와 **Grounded Observations (gobs)**라는 입력 데이터를 사용해
+    **객체 감지 리스트**를 생성하는 역할을 합니다.
+감지된 각 객체에 대한 다양한 정보를 추출하고,
+    이를 **`DetectionList`**라는 구조로 변환하여 관리할 수 있게 합니다.
+이를 통해 후속 처리나 분석에서 객체 데이터를 효율적으로 사용할 수 있도록 준비합니다.
 
-### 주요 기능과 역할:
+### 1. **주요 역할**
+- **감지된 객체 정보**를 `DetectionList` 형태로 변환해 저장합니다.
+    이 리스트는 후속 작업(객체 추적, 병합, 시각화 등)에 사용될 수 있는
+        **구조화된 객체 데이터**를 담고 있습니다.
 
-1. **입력 데이터**:
-   - `obj_pcds_and_bboxes`:
-        각 객체의 3D Point Cloud와 경계 상자(Bounding Box) 정보를 포함하는 리스트입니다.
-        이 리스트는 이전 단계에서 계산된 객체의 3D 정보를 포함하고 있습니다.
-   - `gobs`:
-    Grounded SAM 감지 결과를 포함하는 데이터 구조로,
-        객체의 마스크, 클래스, 캡션
-   - `color_path`: 현재 프레임의 RGB 이미지 경로
-   - `obj_classes`: 객체 클래스 정보를 포함한 구조로, 객체의 클래스 이름과 클래스 ID를 관리
-   - `image_idx`: 현재 이미지 프레임의 인덱스
+### 2. **세부 로직**
 
-2. **DetectionList 생성**:
-   - `DetectionList`는 감지된 객체의 정보를 저장하는 리스트 구조
-   - 각 객체는 딕셔너리 형태로 리스트에 추가되며, 이후 객체 간의 매칭, 병합, 추적 등의 작업에서 사용
+1. **객체 정보 처리**:
+   - 입력 데이터에서 각 객체에 대한 정보를 가져와 `DetectionList`에 추가
+        여기에는 객체의
+            **클래스 이름, 경계 상자, 마스크, 3D 포인트 클라우드 정보, 신뢰도**, **랜덤 색상**
+   - 각 객체는 **UUID**를 생성해 고유하게 식별되며, 해당 정보가 `DetectionList`에 추가
 
-3. **객체 정보 추출 및 저장**:
-   - 함수는 `gobs`에서 각 객체에 대한 정보를 추출하고, 이를 `DetectionList`에 추가합니다.
-   - 여기에는 객체의 클래스 이름, 마스크, 포인트 클라우드, 경계 상자, 신뢰도, 캡션, 3D 정보 등이 포함
-   - 각 객체는 고유의 `UUID`를 생성하여 식별
+2. **배경 객체 처리**:
+   - 각 객체가 **배경 객체**인지 확인
+   - 객체가 특정 **배경 클래스**에 속하는 경우, `is_background` 필드에 그 정보를 저장
+    - 이를 통해 배경 객체는 필요에 따라 다른 방식으로 처리할 수 있습니다.
 
-4. **객체의 배경 여부 확인**:
-   - 객체가 배경 클래스(`bg_classes`)에 속하는지 확인하여,
-        배경 객체인지 여부를 `is_background` 필드에 저장합니다.
-   - 배경 객체로 판단되면, 그 객체에 대해 별도의 처리를 할 수 있습니다.
-
-5. **추적기 업데이트**:
-   - `tracker` 객체는 각 클래스에 속하는 객체의 수를 추적하며, 전체 객체 수와 새로운 객체 수를 관리
-   - 각 객체가 추가될 때마다
-        해당 클래스의 객체 수(`curr_class_count`)와 전체 객체 수(`total_object_count`),
-        새로운 객체 수(`brand_new_counter`)가 증가합니다.
-
-6. **최종 결과 반환**:
-   - 생성된 `detection_list`는 각 객체의 상세 정보를 포함한 리스트로 반환됩니다.
-        - 이 리스트는 이후 객체 매칭, 병합, 시각화 등 다양한 작업에서 사용될 수 있습니다.
-    Args:
-        obj_pcds_and_bboxes:
-        gobs:
-        color_path:
-        obj_classes:
-        image_idx:
-
-    Returns:
+3. **객체 수 추적**:
+   - 각 객체가 추가될 때마다, **객체 수**를 관리하는 **`tracker`**가 업데이트.
+    - 이는 각 클래스에 속하는 객체 수, 전체 객체 수, 새로운 객체 수 등을 추적
 
     """
     '''
@@ -1378,7 +1381,7 @@ def make_detection_list_from_pcd_and_gobs(obj_pcds_and_bboxes, gobs, color_path,
             'image_idx': [image_idx],  # idx of the image
             'mask_idx': [mask_idx],  # idx of the mask/detection
             'color_path': [color_path],  # path to the RGB image
-            'class_name': curr_class_name,  # global class id for this detection
+            'class_name': curr_class_name,  # global class id for this detection # "sofa chair"
             'class_id': [curr_class_idx],  # global class id for this detection
             'captions': [gobs['captions'][mask_idx]
                         ],  # captions for this detection
