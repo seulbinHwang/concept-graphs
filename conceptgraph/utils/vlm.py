@@ -162,7 +162,6 @@ def encode_image_for_openai(image_path: str,
     return encoded_image
 
 
-
 def consolidate_captions(client: OpenAI, captions: list):
     """
 

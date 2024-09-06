@@ -101,20 +101,29 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         end: Optional[int] = -1,
         desired_height: int = 480,
         desired_width: int = 640,
-        channels_first: bool = False,
-        normalize_color: bool = False,
-        device="cuda:0",
-        dtype=torch.float,
+        channels_first: bool = False, #####
+        normalize_color: bool = False, #####
+        device="cuda:0", #####
+        dtype=torch.float, #####
         load_embeddings: bool = False,
         embedding_dir: str = "feat_lseg_240_320",
         embedding_dim: int = 512,
-        relative_pose:
+        relative_pose: #####
         bool = True,  # If True, the pose is relative to the first frame
         **kwargs,
     ):
+        """
+1. png_depth_scale 설정
+2. intrinsic 저장
+3. 원본 사진 H,W 와 , desired 사진 H,W 설정 (그리고 downsample ratio 계산)
+4. color_paths / depth_paths / 설정 (start, end, stride로 관리)
+5. pose 불러옴
+
+        """
         super().__init__()
         self.name = config_dict["dataset_name"]
         self.device = device
+        #
         self.png_depth_scale = config_dict["camera_params"]["png_depth_scale"]
 
         self.orig_height = config_dict["camera_params"]["image_height"] # 680
@@ -206,8 +215,9 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         raise NotImplementedError
 
     def _preprocess_color(self, color: np.ndarray):
-        r"""Preprocesses the color image by resizing to :math:`(H, W, C)`, (optionally) normalizing values to
-        :math:`[0, 1]`, and (optionally) using channels first :math:`(C, H, W)` representation.
+        r"""Preprocesses the color image by "resizing" to :math:`(H, W, C)`,
+            (optionally) normalizing values to :math:`[0, 1]`,
+        and (optionally) using channels first :math:`(C, H, W)` representation.
 
         Args:
             color (np.ndarray): Raw input rgb image
@@ -282,7 +292,7 @@ class GradSLAMDataset(torch.utils.data.Dataset):
     def get_cam_K(self):
         '''
         Return camera intrinsics matrix K
-        
+
         Returns:
             K (torch.Tensor): Camera intrinsics matrix, of shape (3, 3)
         '''
@@ -297,13 +307,23 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         raise NotImplementedError
 
     def __getitem__(self, index):
+        """
+logic
+    - color, depth, K 를 resize에 맞게 수정
+
+
+Returns:
+    color_tensor: (680, 1200, 3)  # resized torch
+    depth_tensor: (680, 1200, 1)  # resized torch
+    intrinsics: (4, 4)  # resize 가 들어간 것
+        """
         color_path = self.color_paths[index]
         depth_path = self.depth_paths[index]
         color = np.asarray(imageio.imread(color_path), dtype=float)
+        # resizing
         color = self._preprocess_color(color)
         color = torch.from_numpy(color)
         if ".png" in depth_path:
-            # depth_data = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
             depth = np.asarray(imageio.imread(depth_path), dtype=np.int64)
         elif ".exr" in depth_path:
             depth = readEXR_onlydepth(depth_path)
@@ -311,16 +331,17 @@ class GradSLAMDataset(torch.utils.data.Dataset):
             depth = np.load(depth_path)
         else:
             raise NotImplementedError
-
+        # K : (3, 3)
         K = as_intrinsics_matrix([self.fx, self.fy, self.cx, self.cy])
         K = torch.from_numpy(K)
         if self.distortion is not None:
             # undistortion is only applied on color image, not depth!
             color = cv2.undistort(color, K, self.distortion)
-
+        # resizing
         depth = self._preprocess_depth(depth)
         depth = torch.from_numpy(depth)
 
+        # K 를 resizing에 맞게 수정
         K = conceptgraphs_datautils.scale_intrinsics(
             K, self.height_downsample_ratio, self.width_downsample_ratio)
         intrinsics = torch.eye(4).to(K)
@@ -1112,7 +1133,14 @@ def get_dataset(dataconfig, basedir, sequence, **kwargs):
     """
 
     Args:
-        dataconfig: dataset/dataconfigs/replica/replica.yaml
+        dataconfig: = cfg.dataset_config (cfg from rerun_realtime_mapping.yaml)
+            conceptgraph/dataset/dataconfigs/replica/replica.yaml
+
+            from
+                conceptgraph/hydra_configs/rerun_realtime_mapping.yaml
+            final
+                conceptgraph/dataset/dataconfigs/replica/replica.yaml
+
         basedir: Replica
         sequence: room0
         **kwargs:
@@ -1133,7 +1161,7 @@ def get_dataset(dataconfig, basedir, sequence, **kwargs):
         return Ai2thorDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["record3d"]:
         return Record3DDataset(config_dict, basedir, sequence, **kwargs)
-    elif config_dict["dataset_name"].lower() in ["realsense"]:
+    elif config_dict["dataset_name"].lower() in ["realsense"]: # ma
         return RealsenseDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["multiscan"]:
         return MultiscanDataset(config_dict, basedir, sequence, **kwargs)

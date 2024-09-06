@@ -64,6 +64,7 @@ class DetectionList(list):
 `DetectionList` 클래스는 탐지된 객체의 데이터를 효율적으로 관리하고, 각 객체의 속성 값을 **추출**, **변환**, **시각적 구분**을 제공하는 여러 기능을 추가한 확장 리스트입니다. 객체 간의 구분을 돕기 위해 **클래스별 색상 적용**이나 **객체별 색상 구분** 같은 시각적 처리를 쉽게 할 수 있게 설계되었습니다.
 
     """
+
     def get_values(self, key, idx: int = None):
         if idx is None:
             return [detection[key] for detection in self]
@@ -96,7 +97,7 @@ class DetectionList(list):
                 v = v[idx]
             if isinstance(v, o3d.geometry.OrientedBoundingBox) or \
                 isinstance(v, o3d.geometry.AxisAlignedBoundingBox):
-                v = np.asarray(v.get_box_points()) # (8, 3)
+                v = np.asarray(v.get_box_points())  # (8, 3)
             if isinstance(v, np.ndarray):
                 v = torch.from_numpy(v)
             values.append(v)
@@ -206,6 +207,7 @@ class MapObjectList(DetectionList):
    - 복원된 데이터는 다시 객체 리스트로 추가
 
     """
+
     def compute_similarities(self, new_clip_ft):
         '''
         The input feature should be of shape (D, ), a one-row vector

@@ -290,9 +290,9 @@ def init_pcd_denoise_dbscan(pcd: o3d.geometry.PointCloud,
 def init_process_pcd(
         pcd,
         downsample_voxel_size,  # 0.01
-        dbscan_remove_noise, # True
-        dbscan_eps, # 0.1
-        dbscan_min_points, # 10
+        dbscan_remove_noise,  # True
+        dbscan_eps,  # 0.1
+        dbscan_min_points,  # 10
         run_dbscan=True):
     """
 이 함수는 주어진 포인트 클라우드(pcd)를 다운샘플링하고,
@@ -317,12 +317,13 @@ init_pcd_denoise_dbscan 함수를 호출하여 DBSCAN 클러스터링을 이용�
     이 작업은 포인트 클라우드에서 가장 큰 클러스터만 남기고,
     작은 클러스터(노이즈로 간주)를 제거하는 역할
     """
-    pcd = pcd.voxel_down_sample(voxel_size=downsample_voxel_size) # 1 cm 인듯
+    pcd = pcd.voxel_down_sample(voxel_size=downsample_voxel_size)  # 1 cm 인듯
 
     if dbscan_remove_noise and run_dbscan:
-        pcd = init_pcd_denoise_dbscan(pcd,
-                                      eps=dbscan_eps, # 0.1
-                                      min_points=dbscan_min_points) # 10
+        pcd = init_pcd_denoise_dbscan(
+            pcd,
+            eps=dbscan_eps,  # 0.1
+            min_points=dbscan_min_points)  # 10
 
     return pcd
 
@@ -1381,7 +1382,8 @@ def make_detection_list_from_pcd_and_gobs(obj_pcds_and_bboxes, gobs, color_path,
             'image_idx': [image_idx],  # idx of the image
             'mask_idx': [mask_idx],  # idx of the mask/detection
             'color_path': [color_path],  # path to the RGB image
-            'class_name': curr_class_name,  # global class id for this detection # "sofa chair"
+            'class_name':
+                curr_class_name,  # global class id for this detection # "sofa chair"
             'class_id': [curr_class_idx],  # global class id for this detection
             'captions': [gobs['captions'][mask_idx]
                         ],  # captions for this detection

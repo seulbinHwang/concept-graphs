@@ -71,8 +71,6 @@ python -m conceptgraph.slam.rerun_realtime_mapping
 torch.set_grad_enabled(False)
 RUN_OPEN_API = False
 
-
-
 import rclpy
 from rclpy.node import Node
 import message_filters
@@ -100,42 +98,41 @@ class RealtimeHumanSegmenterNode(Node):
 
     def __init__(self, cfg: DictConfig):
         super().__init__('ros2_bridge')
-        tracker = MappingTracker()
+        self.tracker = MappingTracker()
+        self.orr = OptionalReRun()
+        self.orr.set_use_rerun(cfg.use_rerun)
+        self.orr.init("realtime_mapping")
+        self.orr.spawn()
 
-        orr = OptionalReRun()
-        orr.set_use_rerun(cfg.use_rerun)
-        orr.init("realtime_mapping")
-        orr.spawn()
-
-        owandb = OptionalWandB()
-        owandb.set_use_wandb(cfg.use_wandb)
-        owandb.init(
+        self.owandb = OptionalWandB()
+        self.owandb.set_use_wandb(cfg.use_wandb)
+        self.owandb.init(
             project="concept-graphs",
             #    entity="concept-graphs",
             config=cfg_to_dict(cfg),
         )
         cfg = process_cfg(cfg)
-        objects = MapObjectList(device=cfg.device)
-        map_edges = MapEdgeMapping(objects)
+        self.objects = MapObjectList(device=cfg.device)
+        self.map_edges = MapEdgeMapping(self.objects)
 
         # output folder for this mapping experiment
         # dataset_root: Datasets
         # scene_id: Replica/room0
         # exp_suffix: r_mapping_stride10
-        # exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
-        exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
-                                        cfg.exp_suffix)
+        # self.exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
+        self.exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
+                                             cfg.exp_suffix)
 
         # output folder of the detections experiment to use
         # det_exp_path: Datasets/Replica/room0/exps/s_detections_stride10
-        det_exp_path = get_exp_out_path(cfg.dataset_root,
-                                        cfg.scene_id,
-                                        cfg.detections_exp_suffix,
-                                        make_dir=False)
+        self.det_exp_path = get_exp_out_path(cfg.dataset_root,
+                                             cfg.scene_id,
+                                             cfg.detections_exp_suffix,
+                                             make_dir=False)
 
         # we need to make sure to use the same classes as the ones used in the detections
         detections_exp_cfg = cfg_to_dict(cfg)
-        obj_classes = ObjectClasses(
+        self.obj_classes = ObjectClasses(
             classes_file_path=detections_exp_cfg['classes_file'],
             bg_classes=detections_exp_cfg['bg_classes'],
             skip_bg=detections_exp_cfg['skip_bg'])
@@ -143,54 +140,56 @@ class RealtimeHumanSegmenterNode(Node):
         # if we need to do detections
         # det_exp_path:
         # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10
-        print("det_exp_path:", det_exp_path)
-        run_detections = check_run_detections(cfg.force_detection, det_exp_path)
-        print("run_detections:", run_detections)
-        det_exp_pkl_path = get_det_out_path(det_exp_path)
-        det_exp_vis_path = get_vis_out_path(det_exp_path)
+        print("det_exp_path:", self.det_exp_path)
+        self.run_detections = check_run_detections(cfg.force_detection,
+                                                   self.det_exp_path)
+        print("run_detections:", self.run_detections)
+        self.det_exp_pkl_path = get_det_out_path(self.det_exp_path)
+        self.det_exp_vis_path = get_vis_out_path(self.det_exp_path)
 
-        prev_adjusted_pose = None
+        self.prev_adjusted_pose = None
 
-        if run_detections:
+        if self.run_detections:
             print("\n".join(["Running detections..."] * 10))
-            det_exp_path.mkdir(parents=True, exist_ok=True)
+            self.det_exp_path.mkdir(parents=True, exist_ok=True)
 
             ## Initialize the detection models
-            detection_model = measure_time(YOLO)('yolov8l-world.pt')
-            sam_predictor = SAM(
+            self.detection_model = measure_time(YOLO)('yolov8l-world.pt')
+            self.sam_predictor = SAM(
                 'sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
-            # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
-            clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
+            # self.sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
+            self.clip_model, _, self.clip_preprocess = open_clip.create_model_and_transforms(
                 "ViT-H-14", "laion2b_s32b_b79k")
-            clip_model = clip_model.to(cfg.device)
-            clip_tokenizer = open_clip.get_tokenizer("ViT-H-14")
+            self.clip_model = self.clip_model.to(cfg.device)
+            self.clip_tokenizer = open_clip.get_tokenizer("ViT-H-14")
 
             # Set the classes for the detection model
-            detection_model.set_classes(obj_classes.get_classes_arr())
+            self.detection_model.set_classes(self.obj_classes.get_classes_arr())
             if RUN_OPEN_API:
-                openai_client = get_openai_client()
+                self.openai_client = get_openai_client()
             else:
-                openai_client = None
+                self.openai_client = None
 
         else:
             print("\n".join(["NOT Running detections..."] * 10))
 
-        save_hydra_config(cfg, exp_out_path)
+        save_hydra_config(cfg, self.exp_out_path)
         save_hydra_config(detections_exp_cfg,
-                          exp_out_path,
+                          self.exp_out_path,
                           is_detection_config=True)
 
         if cfg.save_objects_all_frames:
-            obj_all_frames_out_path = exp_out_path / "saved_obj_all_frames" / f"det_{cfg.detections_exp_suffix}"
-            os.makedirs(obj_all_frames_out_path, exist_ok=True)
+            self.obj_all_frames_out_path = self.exp_out_path / "saved_obj_all_frames" / f"det_{cfg.detections_exp_suffix}"
+            os.makedirs(self.obj_all_frames_out_path, exist_ok=True)
 
-        exit_early_flag = False
-        counter = 0
+        self.exit_early_flag = False
+        self.counter = 0
         ###################################
-
+        self.frame_idx = 0
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
         self._frame_idx = 0
+        self.cfg = cfg
         self._camera_pose = self._set_extrinsic()
         bbox_2d_topic = \
             f"realsense{self.args.realsense_idx}/bounding_boxes_2d"
@@ -224,7 +223,7 @@ class RealtimeHumanSegmenterNode(Node):
 
         depth_camera_info_topic_name = \
             f"realsense{self.args.realsense_idx}/depth_camera_info"
-        self.intrinsic = self.depth_dist_coeffs = None
+        self.intrinsics = self.depth_dist_coeffs = None
         self.depth_camera_info_sub = self.create_subscription(
             CameraInfo, depth_camera_info_topic_name,
             self.depth_camera_info_callback, 10)
@@ -288,30 +287,20 @@ class RealtimeHumanSegmenterNode(Node):
 
     def sync_callback(self, rgb_msg: CompressedImage,
                       depth_msg: CompressedImage):
-        if self.intrinsic is None:
+        color_path = None
+        if self.intrinsics is None:
             return
-        if self._camera_pose is None:
-            self._camera_pose = self._get_pose_data()
+        # TODO: 세계 좌표계 기준 카메라 위치를 담도록 수정해야함
+        agent_pose = self._get_pose_data()
         rgb_array = self.rgb_callback(rgb_msg)
         depth_array = self.depth_callback(depth_msg)
         #################
-        tracker.curr_frame_idx = frame_idx
-        counter += 1
-        orr.set_time_sequence("frame", frame_idx)
-
-        # Check if we should exit early only if the flag hasn't been set yet
-        if not exit_early_flag and should_exit_early(cfg.exit_early_file):
-            print("Exit early signal detected. Skipping to the final frame...")
-            exit_early_flag = True
-
-        # If exit early flag is set and we're not at the last frame, skip this iteration
-        if exit_early_flag and frame_idx < len(dataset) - 1:
-            continue
+        self.tracker.curr_frame_idx = self.frame_idx
+        self.counter += 1
+        self.orr.set_time_sequence("frame", self.frame_idx)
 
         # Read info about current frame from dataset
         # color image
-        color_path = Path(dataset.color_paths[frame_idx])
-        image_original_pil = Image.open(color_path)  # 필요 없음
         # color and depth tensors, and camera instrinsics matrix
         """
         color_path -> image_original_pil (PIL) # 필요 없음
@@ -321,37 +310,28 @@ class RealtimeHumanSegmenterNode(Node):
         depth_tensor: (680, 1200, 1) -> depth_array: (680, 1200) # resized
         intrinsics: (4, 4)  # resize 가 들어간 것
         """
-        color_tensor, depth_tensor, intrinsics, *_ = dataset[frame_idx]
 
-        # Covert to numpy and do some sanity checks
-        depth_tensor = depth_tensor[..., 0]  # (H, W)
-        depth_array = depth_tensor.cpu().numpy()
-        color_np = color_tensor.cpu().numpy()  # (H, W, 3)
-        image_rgb = (color_np).astype(np.uint8)  # (H, W, 3)
-        assert image_rgb.max() > 1, "Image is not in range [0, 255]"
-
+        # det_exp_vis_path:Datasets/Replica/room0/exps/s_detections_stride10/vis
+        # color_path: Datasets/Replica/room0/results/frame000000.jpg
+        # vis_save_path_for_vlm
+        # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm.jpg
+        # CHECK: 내가 수정했음
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
-            det_exp_vis_path, color_path)
+            self.det_exp_vis_path, color_path, self.frame_idx)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
-            det_exp_vis_path, color_path, w_edges=True)
+            self.det_exp_vis_path, color_path, self.frame_idx, w_edges=True)
 
-        if run_detections:
-            # opencv can't read Path objects...
-            image = cv2.imread(str(color_path))  # This will in BGR color space
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # (H, W, 3)
-
-            # Do initial object detection (YOLO world)
-
+        if self.run_detections:
             ##### 1. [시작] RGBD에서 instance segmentation 진행
-            results = detection_model.predict(color_path,
-                                              conf=0.1,
-                                              verbose=False)
+            results = self.detection_model.predict(rgb_array,
+                                                   conf=0.1,
+                                                   verbose=False)
             confidences = results[0].boxes.conf.cpu().numpy()
             detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
                 int)  # (N,)
             # detection_class_labels = [ "sofa chair 0", ... ]
             detection_class_labels = [
-                f"{obj_classes.get_classes_arr()[class_id]} {class_idx}"
+                f"{self.obj_classes.get_classes_arr()[class_id]} {class_idx}"
                 for class_idx, class_id in enumerate(detection_class_ids)
             ]
             xyxy_tensor = results[0].boxes.xyxy
@@ -362,13 +342,16 @@ class RealtimeHumanSegmenterNode(Node):
             # UltraLytics SAM
             if xyxy_tensor.numel() != 0:
                 # segmentation
-                sam_out = sam_predictor.predict(color_path,
-                                                bboxes=xyxy_tensor,
-                                                verbose=False)
+                sam_out = self.sam_predictor.predict(rgb_array,
+                                                     bboxes=xyxy_tensor,
+                                                     verbose=False)
                 masks_tensor = sam_out[0].masks.data
 
                 masks_np = masks_tensor.cpu().numpy()  # (N, H, W)
             else:
+                # color_tensor: (H, W, 3)
+                H, W, _ = rgb_array.shape
+                color_tensor = np.zeros((H, W, 3), dtype=np.uint8)
                 masks_np = np.empty((0, *color_tensor.shape[:2]),
                                     dtype=np.float64)
             # Create a detections object that we will save later.
@@ -384,11 +367,11 @@ class RealtimeHumanSegmenterNode(Node):
             # detection_class_labels: ["sofa chair 0", ...]
             # det_exp_path:
             # Datasets/Replica/room0/exps/s_detections_stride10
-            # det_exp_vis_path:
+            # self.det_exp_vis_path:
             # Datasets/Replica/room0/exps/s_detections_stride10/vis
             # color_path
             # Datasets/Replica/room0/results/frame000000.jpg
-            # cfg.make_edges: True
+            # self.cfg.make_edges: True
             """ make_vlm_edges_and_captions
             labels: ["sofa chair 0", ...]
             edges: [("1", "on top of", "2"), ("3", "under", "2"), ...]
@@ -411,10 +394,14 @@ class RealtimeHumanSegmenterNode(Node):
 
             ##### 5. [시작] VLM을 통해 edge와 caption 정보를 구한다.
             ##### 논문과 다르게, 현 이미지 1장에 대한 edge와 node caption 정보를 구한다.
+            # image: np.zeros (H, W, 3)
+            # TODO: check
+            image = np.zeros_like(rgb_array)
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
-                image, curr_det, obj_classes, detection_class_labels,
-                det_exp_vis_path, color_path, cfg.make_edges, openai_client)
-            del edge_image
+                image, curr_det, self.obj_classes, detection_class_labels,
+                self.det_exp_vis_path, color_path, self.cfg.make_edges,
+                self.openai_client, self.frame_idx)
+            # del edge_image
             ##### 5. [끝] VLM을 통해 edge와 caption 정보를 구한다.
             """
         image_crops: List[Image.Image]
@@ -426,13 +413,15 @@ class RealtimeHumanSegmenterNode(Node):
             """
             ##### 2. [시작] CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
+            # TODO: check "rgb_array" 가 맞는지
             image_crops, image_feats, text_feats = compute_clip_features_batched(
-                image_rgb, curr_det, clip_model, clip_preprocess,
-                clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
+                rgb_array, curr_det, self.clip_model,
+                self.clip_preprocess, self.clip_tokenizer,
+                self.obj_classes.get_classes_arr(), self.cfg.device)
             ##### 2. [끝] CLIP feature를 계산
 
             # increment total object detections
-            tracker.increment_total_detections(len(curr_det.xyxy))
+            self.tracker.increment_total_detections(len(curr_det.xyxy))
 
             # Save results
             # Convert the detections to a dict. The elements are in np.array
@@ -442,8 +431,8 @@ class RealtimeHumanSegmenterNode(Node):
                 "confidence": curr_det.confidence,  # (34,)
                 "class_id": curr_det.class_id,  # (34,)
                 "mask": curr_det.mask,  # (34, 680, 1200)
-                "classes":
-                    obj_classes.get_classes_arr(),  # len = 200, "alarm clock"
+                "classes": self.obj_classes.get_classes_arr(
+                ),  # len = 200, "alarm clock"
                 "image_crops": image_crops,  # len = 34, <PIL.Image.Image>
                 "image_feats": image_feats,  # (34, 1024)
                 "text_feats": text_feats,  # len = 0 # 아마?
@@ -457,8 +446,8 @@ class RealtimeHumanSegmenterNode(Node):
 
             # save the detections if needed
             # important
-            if cfg.save_detections:
-                # det_exp_vis_path:
+            if self.cfg.save_detections:
+                # self.det_exp_vis_path:
                 # Datasets/Replica/room0/exps/s_detections_stride10/vis
                 # color_path
                 # Datasets/Replica/room0/results/frame000000.jpg
@@ -468,11 +457,12 @@ class RealtimeHumanSegmenterNode(Node):
                 vis_save_path: bounding box와 mask가 모두 그려진 이미지
 
                 """
-                vis_save_path = (det_exp_vis_path /
-                                 color_path.name).with_suffix(".jpg")
+                frame_name = f"{self.frame_idx:06}"
+                vis_save_path = (self.det_exp_vis_path /
+                                 frame_name).with_suffix(".jpg")
                 # Visualize and save the annotated image
                 annotated_image, labels = vis_result_fast(
-                    image, curr_det, obj_classes.get_classes_arr())
+                    image, curr_det, self.obj_classes.get_classes_arr())
                 cv2.imwrite(str(vis_save_path), annotated_image)
                 depth_image_rgb = cv2.normalize(depth_array, None, 0, 255,
                                                 cv2.NORM_MINMAX)
@@ -480,47 +470,30 @@ class RealtimeHumanSegmenterNode(Node):
                 depth_image_rgb = cv2.cvtColor(depth_image_rgb,
                                                cv2.COLOR_GRAY2BGR)
                 annotated_depth_image, labels = vis_result_fast_on_depth(
-                    depth_image_rgb, curr_det, obj_classes.get_classes_arr())
+                    depth_image_rgb, curr_det,
+                    self.obj_classes.get_classes_arr())
                 cv2.imwrite(
                     str(vis_save_path).replace(".jpg", "_depth.jpg"),
                     annotated_depth_image)
                 cv2.imwrite(
                     str(vis_save_path).replace(".jpg", "_depth_only.jpg"),
                     depth_image_rgb)
-                save_detection_results(det_exp_pkl_path / vis_save_path.stem,
-                                       results)
-        else:
-            # Support current and old saving formats
-            print("color_path:", color_path)
-            print("color_path.stem:", color_path.stem)
-            if os.path.exists(det_exp_pkl_path / color_path.stem):
-                raw_grounded_obs = load_saved_detections(det_exp_pkl_path /
-                                                         color_path.stem)
-            elif os.path.exists(det_exp_pkl_path /
-                                f"{int(color_path.stem):06}"):
-                raw_grounded_obs = load_saved_detections(
-                    det_exp_pkl_path / f"{int(color_path.stem):06}")
+                save_detection_results(
+                    self.det_exp_pkl_path / vis_save_path.stem, results)
             else:
-                # if no detections, throw an error
-                raise FileNotFoundError(
-                    f"No detections found for frame {frame_idx}at paths \n{det_exp_pkl_path / color_path.stem} or \n{det_exp_pkl_path / f'{int(color_path.stem):06}'}."
-                )
-
+                raise NotImplementedError
         ########
 
-        # get pose, this is the untrasformed pose.
-        unt_pose = dataset.poses[frame_idx]
-        unt_pose = unt_pose.cpu().numpy()  # (4, 4)
-
-        # Don't apply any transformation otherwise
-        adjusted_pose = unt_pose  # (4, 4)
-        # orr = Optional re-run
-        prev_adjusted_pose = orr_log_camera(intrinsics, adjusted_pose,
-                                            prev_adjusted_pose, cfg.image_width,
-                                            cfg.image_height, frame_idx)
+        # self.orr = Optional re-run
+        self.prev_adjusted_pose = orr_log_camera(self.intrinsics, agent_pose,
+                                                 self.prev_adjusted_pose,
+                                                 self.cfg.image_width,
+                                                 self.cfg.image_height,
+                                                 self.frame_idx)
 
         orr_log_rgb_image(color_path)
-        orr_log_annotated_image(color_path, det_exp_vis_path)
+        orr_log_annotated_image(color_path, self.det_exp_vis_path)
+        depth_tensor = torch.tensor(depth_array)  # check
         orr_log_depth_image(depth_tensor)  # resized
         orr_log_vlm_image(vis_save_path_for_vlm)
         orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
@@ -532,7 +505,7 @@ class RealtimeHumanSegmenterNode(Node):
                 "class_id": curr_det.class_id,  # (34,)
                 "mask": curr_det.mask,  # (34, 680, 1200)
                 "classes":
-                    obj_classes.get_classes_arr(),  # len = 200, "alarm clock"
+                    self.obj_classes.get_classes_arr(),  # len = 200, "alarm clock"
                 "image_crops": image_crops,  # len = 34, <PIL.Image.Image>
                 "image_feats": image_feats,  # (34, 1024)
                 "text_feats": text_feats,  # len = 0 # 아마?
@@ -544,7 +517,7 @@ class RealtimeHumanSegmenterNode(Node):
             }
         image_rgb: (H, W, 3)
         """
-        resized_grounded_obs = resize_gobs(raw_grounded_obs, image_rgb)
+        resized_grounded_obs = resize_gobs(raw_grounded_obs, rgb_array)
         ##### 1.1. [시작] segmentation 결과 필터링
         """
 2. **필터링 기준 설정**:
@@ -559,19 +532,19 @@ class RealtimeHumanSegmenterNode(Node):
         """
         filtered_grounded_obs = filter_gobs(
             resized_grounded_obs,
-            image_rgb,
-            skip_bg=cfg.skip_bg,
-            BG_CLASSES=obj_classes.get_bg_classes_arr(),
-            mask_area_threshold=cfg.mask_area_threshold,
-            max_bbox_area_ratio=cfg.max_bbox_area_ratio,
-            mask_conf_threshold=cfg.mask_conf_threshold,
+            rgb_array,
+            skip_bg=self.cfg.skip_bg,
+            BG_CLASSES=self.obj_classes.get_bg_classes_arr(),
+            mask_area_threshold=self.cfg.mask_area_threshold,
+            max_bbox_area_ratio=self.cfg.max_bbox_area_ratio,
+            mask_conf_threshold=self.cfg.mask_conf_threshold,
         )
         ##### 1.1. [끝] segmentation 결과 필터링
 
         grounded_obs = filtered_grounded_obs
 
         if len(grounded_obs['mask']) == 0:  # no detections in this frame
-            continue
+            return
 
         # this helps make sure things like 베개 on 소파 are separate objects.
         grounded_obs['mask'] = mask_subtract_contained(grounded_obs['xyxy'],
@@ -580,25 +553,26 @@ class RealtimeHumanSegmenterNode(Node):
 -----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------
 depth_array.shape: (680, 1200)
 grounded_obs['mask'].shape: (N, 680, 1200)
-intrinsics.cpu().numpy()[:3, :3].shape: (3, 3)
+self.intrinsics.cpu().numpy()[:3, :3].shape: (3, 3)
 image_rgb.shape: (680, 1200, 3)
-adjusted_pose.shape: (4, 4)
+agent_pose.shape: (4, 4)
         """
         ##### 3. [시작] pointclouds 만들기
         # obj_pcds_and_bboxes : [ {'pcd': pcd, 'bbox': bbox} , ... ]
         obj_pcds_and_bboxes: List[Dict[str, Any]] = measure_time(
             detections_to_obj_pcd_and_bbox)(
-            depth_array=depth_array,
-            masks=grounded_obs['mask'],
-            cam_K=intrinsics.cpu().numpy()[:3, :3],  # Camera intrinsics
-            image_rgb=image_rgb,
-            trans_pose=adjusted_pose,
-            min_points_threshold=cfg.min_points_threshold,  # 16
-            # overlap # "iou", "giou", "overlap"
-            spatial_sim_type=cfg.spatial_sim_type,  # overlap
-            obj_pcd_max_points=cfg.obj_pcd_max_points,  # 5000
-            device=cfg.device,
-        )
+                depth_array=depth_array,
+                masks=grounded_obs['mask'],
+                cam_K=self.intrinsics.cpu().numpy()
+                [:3, :3],  # Camera intrinsics
+                image_rgb=None,
+                trans_pose=agent_pose,
+                min_points_threshold=self.cfg.min_points_threshold,  # 16
+                # overlap # "iou", "giou", "overlap"
+                spatial_sim_type=self.cfg.spatial_sim_type,  # overlap
+                obj_pcd_max_points=self.cfg.obj_pcd_max_points,  # 5000
+                device=self.cfg.device,
+            )
 
         for obj in obj_pcds_and_bboxes:
             if obj:
@@ -612,14 +586,15 @@ adjusted_pose.shape: (4, 4)
                 ##### 3.1. [시작] pointclouds 필터링
                 obj["pcd"] = init_process_pcd(
                     pcd=obj["pcd"],
-                    downsample_voxel_size=cfg["downsample_voxel_size"],  # 0.01
-                    dbscan_remove_noise=cfg["dbscan_remove_noise"],  # True
-                    dbscan_eps=cfg["dbscan_eps"],  # 0.1
-                    dbscan_min_points=cfg["dbscan_min_points"],  # 10
+                    downsample_voxel_size=self.
+                    cfg["downsample_voxel_size"],  # 0.01
+                    dbscan_remove_noise=self.cfg["dbscan_remove_noise"],  # True
+                    dbscan_eps=self.cfg["dbscan_eps"],  # 0.1
+                    dbscan_min_points=self.cfg["dbscan_min_points"],  # 10
                 )
                 # point cloud를 filtering 했으니, bounding box를 다시 계산
                 obj["bbox"] = get_bounding_box(
-                    spatial_sim_type=cfg['spatial_sim_type'],  # overlap
+                    spatial_sim_type=self.cfg['spatial_sim_type'],  # overlap
                     pcd=obj["pcd"],
                 )
                 ##### 3.1. [끝] pointclouds 필터링
@@ -632,7 +607,7 @@ adjusted_pose.shape: (4, 4)
                 "class_id": curr_det.class_id,  # (34,)
                 "mask": curr_det.mask,  # (34, 680, 1200)
                 "classes":
-                    obj_classes.get_classes_arr(),  # len = 200, "alarm clock"
+                    self.obj_classes.get_classes_arr(),  # len = 200, "alarm clock"
                 "image_crops": image_crops,  # len = 34, <PIL.Image.Image>
                 "image_feats": image_feats,  # (34, 1024)
                 "text_feats": text_feats,  # len = 0 # 아마?
@@ -646,11 +621,11 @@ adjusted_pose.shape: (4, 4)
 
         """
         detection_list = make_detection_list_from_pcd_and_gobs(
-            obj_pcds_and_bboxes, grounded_obs, color_path, obj_classes,
-            frame_idx)
+            obj_pcds_and_bboxes, grounded_obs, color_path, self.obj_classes,
+            self.frame_idx)
 
         if len(detection_list) == 0:  # no detections, skip
-            continue
+            return
         ##### 3. [끝] pointclouds 만들기
 
         ##### 4. [시작] 기존 object 들과 융합하기
@@ -658,89 +633,83 @@ adjusted_pose.shape: (4, 4)
         # if no objects yet in the map,
         # just add all the objects from the current frame
         # then continue, no need to match or merge
-        if len(objects) == 0:
-            objects.extend(detection_list)
-            tracker.increment_total_objects(len(detection_list))
-            owandb.log({
-                "total_objects_so_far": tracker.get_total_objects(),
+        if len(self.objects) == 0:
+            self.objects.extend(detection_list)
+            self.tracker.increment_total_objects(len(detection_list))
+            self.owandb.log({
+                "total_objects_so_far": self.tracker.get_total_objects(),
                 "objects_this_frame": len(detection_list),
             })
-            continue
+            return
 
         ### compute similarities and then merge
         # spatial_sim : (새 검지 개수, 누적 물체 개수) -> 각 값은 det와 obj의 중첩 비율
         spatial_sim = compute_spatial_similarities(
-            spatial_sim_type=cfg['spatial_sim_type'],  # overlap
+            spatial_sim_type=self.cfg['spatial_sim_type'],  # overlap
             detection_list=detection_list,
-            objects=objects,
-            downsample_voxel_size=cfg['downsample_voxel_size'])  # 0.01
+            objects=self.objects,
+            downsample_voxel_size=self.cfg['downsample_voxel_size'])  # 0.01
         # visual_sim :  (새 검지 개수, 누적 물체 개수) -> 각 값은 det와 obj의 코싸인 유사도
-        visual_sim = compute_visual_similarities(detection_list, objects)
+        visual_sim = compute_visual_similarities(detection_list, self.objects)
 
         # match_method = "sim_sum" # "sep_thresh", "sim_sum"
         # phys_bias = 0.0
         # 단순하게 두개를 그냥 더함
         # agg_sim : (새 검지 개수, 누적 물체 개수) -> 각 값은 det와 obj의 유사도
-        agg_sim = aggregate_similarities(match_method=cfg['match_method'],
-                                         phys_bias=cfg['phys_bias'],
+        agg_sim = aggregate_similarities(match_method=self.cfg['match_method'],
+                                         phys_bias=self.cfg['phys_bias'],
                                          spatial_sim=spatial_sim,
                                          visual_sim=visual_sim)
 
-        # Perform matching of detections to existing objects
+        # Perform matching of detections to existing self.objects
         # match_indices: 길이는 "새 검지 개수"
         match_indices: List[Optional[int]] = match_detections_to_objects(
             agg_sim=agg_sim,
-            detection_threshold=cfg[
-                'sim_threshold']  # 1.2
+            detection_threshold=self.cfg['sim_threshold']  # 1.2
         )
 
-        objects = merge_obj_matches(
+        self.objects = merge_obj_matches(
             detection_list=detection_list,
-            objects=objects,
+            objects=self.objects,
             match_indices=match_indices,
-            downsample_voxel_size=cfg['downsample_voxel_size'],  # 0.01
-            dbscan_remove_noise=cfg['dbscan_remove_noise'],  # True
-            dbscan_eps=cfg['dbscan_eps'],  # 0.1
-            dbscan_min_points=cfg['dbscan_min_points'],  # 10
-            spatial_sim_type=cfg['spatial_sim_type'],  # overlap
-            device=cfg['device']
+            downsample_voxel_size=self.cfg['downsample_voxel_size'],  # 0.01
+            dbscan_remove_noise=self.cfg['dbscan_remove_noise'],  # True
+            dbscan_eps=self.cfg['dbscan_eps'],  # 0.1
+            dbscan_min_points=self.cfg['dbscan_min_points'],  # 10
+            spatial_sim_type=self.cfg['spatial_sim_type'],  # overlap
+            device=self.cfg['device']
             # Note: Removed 'match_method' and 'phys_bias' as they do not appear in the provided merge function
         )
         ##### 4. [끝] 기존 object 들과 융합하기
 
-        # fix the class names for objects
+        # fix the class names for self.objects
         # they should be the most popular name, not the first name
-        for idx, obj in enumerate(objects):
+        for idx, obj in enumerate(self.objects):
             temp_class_name = obj["class_name"]  # "sofa chair"
             curr_obj_class_id_counter = Counter(obj['class_id'])
             most_common_class_id = curr_obj_class_id_counter.most_common(
                 1)[0][0]
-            most_common_class_name = obj_classes.get_classes_arr(
+            most_common_class_name = self.obj_classes.get_classes_arr(
             )[most_common_class_id]
             if temp_class_name != most_common_class_name:
                 obj["class_name"] = most_common_class_name
 
         ##### 5. [시작] edge 계산하기
 
-        map_edges = process_edges(match_indices, grounded_obs, len(objects),
-                                  objects, map_edges, frame_idx)
-        is_final_frame = frame_idx == len(dataset) - 1
-        if is_final_frame:
-            print("Final frame detected. Performing final post-processing...")
-
+        self.map_edges = process_edges(match_indices, grounded_obs,
+                                       len(self.objects), self.objects,
+                                       self.map_edges, self.frame_idx)
         # Clean up outlier edges
         edges_to_delete = []
-        for curr_map_edge in map_edges.edges_by_index.values():
+        for curr_map_edge in self.map_edges.edges_by_index.values():
             curr_obj1_idx = curr_map_edge.obj1_idx
             curr_obj2_idx = curr_map_edge.obj2_idx
-            obj1_class_name = objects[curr_obj1_idx]['class_name']
-            obj2_class_name = objects[curr_obj2_idx]['class_name']
             curr_first_detected = curr_map_edge.first_detected
             curr_num_det = curr_map_edge.num_detections
-            if (frame_idx - curr_first_detected > 5) and curr_num_det < 2:
+            if (self.frame_idx - curr_first_detected > 5) and curr_num_det < 2:
                 edges_to_delete.append((curr_obj1_idx, curr_obj2_idx))
         for edge in edges_to_delete:
-            map_edges.delete_edge(edge[0], edge[1])
+            self.map_edges.delete_edge(edge[0], edge[1])
         ### Perform post-processing periodically if told so
 
         ##### 6. [시작] 주기적 "누적 object" 후처리
@@ -748,173 +717,156 @@ adjusted_pose.shape: (4, 4)
         # Denoising
         if processing_needed(
                 # Run DBSCAN every k frame. This operation is heavy
-                cfg["denoise_interval"],  # 20
-                cfg["run_denoise_final_frame"],  # True
-                frame_idx,
-                is_final_frame,
+                self.cfg["denoise_interval"],  # 20
+                self.cfg["run_denoise_final_frame"],  # True
+                self.frame_idx,
         ):
-            objects = measure_time(denoise_objects)(
-                downsample_voxel_size=cfg['downsample_voxel_size'],  # 0.01
-                dbscan_remove_noise=cfg['dbscan_remove_noise'],  # True
-                dbscan_eps=cfg['dbscan_eps'],  # 0.1
-                dbscan_min_points=cfg['dbscan_min_points'],  # 10
-                spatial_sim_type=cfg['spatial_sim_type'],  # overlap
-                device=cfg['device'],
-                objects=objects)
+            self.objects = measure_time(denoise_objects)(
+                downsample_voxel_size=self.cfg['downsample_voxel_size'],  # 0.01
+                dbscan_remove_noise=self.cfg['dbscan_remove_noise'],  # True
+                dbscan_eps=self.cfg['dbscan_eps'],  # 0.1
+                dbscan_min_points=self.cfg['dbscan_min_points'],  # 10
+                spatial_sim_type=self.cfg['spatial_sim_type'],  # overlap
+                device=self.cfg['device'],
+                objects=self.objects)
 
         # Filtering
         if processing_needed(
                 # Filter objects that have too few associations or are too small
-                cfg["filter_interval"],  # 5
-                cfg["run_filter_final_frame"],  # True
-                frame_idx,
-                is_final_frame,
+                self.cfg["filter_interval"],  # 5
+                self.cfg["run_filter_final_frame"],  # True
+                self.frame_idx,
         ):
-            objects = filter_objects(
-                obj_min_points=cfg['obj_min_points'],
-                obj_min_detections=cfg['obj_min_detections'],
-                objects=objects,
-                map_edges=map_edges)
+            self.objects = filter_objects(
+                obj_min_points=self.cfg['obj_min_points'],
+                obj_min_detections=self.cfg['obj_min_detections'],
+                objects=self.objects,
+                map_edges=self.map_edges)
 
         # Merging
         if processing_needed(
                 # Merge objects based on geometric and semantic similarity
-                cfg["merge_interval"],  # 5
-                cfg["run_merge_final_frame"],  # True
-                frame_idx,
-                is_final_frame,
+                self.cfg["merge_interval"],  # 5
+                self.cfg["run_merge_final_frame"],  # True
+                self.frame_idx,
         ):
-            objects, map_edges = measure_time(merge_objects)(
-                merge_overlap_thresh=cfg["merge_overlap_thresh"],
-                merge_visual_sim_thresh=cfg["merge_visual_sim_thresh"],
-                merge_text_sim_thresh=cfg["merge_text_sim_thresh"],
-                objects=objects,
-                downsample_voxel_size=cfg["downsample_voxel_size"],
-                dbscan_remove_noise=cfg["dbscan_remove_noise"],
-                dbscan_eps=cfg["dbscan_eps"],
-                dbscan_min_points=cfg["dbscan_min_points"],
-                spatial_sim_type=cfg["spatial_sim_type"],
-                device=cfg["device"],
-                do_edges=cfg["make_edges"],
-                map_edges=map_edges)
-        orr_log_objs_pcd_and_bbox(objects, obj_classes)
-        orr_log_edges(objects, map_edges, obj_classes)
+            self.objects, self.map_edges = measure_time(merge_objects)(
+                merge_overlap_thresh=self.cfg["merge_overlap_thresh"],
+                merge_visual_sim_thresh=self.cfg["merge_visual_sim_thresh"],
+                merge_text_sim_thresh=self.cfg["merge_text_sim_thresh"],
+                objects=self.objects,
+                downsample_voxel_size=self.cfg["downsample_voxel_size"],
+                dbscan_remove_noise=self.cfg["dbscan_remove_noise"],
+                dbscan_eps=self.cfg["dbscan_eps"],
+                dbscan_min_points=self.cfg["dbscan_min_points"],
+                spatial_sim_type=self.cfg["spatial_sim_type"],
+                device=self.cfg["device"],
+                do_edges=self.cfg["make_edges"],
+                map_edges=self.map_edges)
+        orr_log_objs_pcd_and_bbox(self.objects, self.obj_classes)
+        orr_log_edges(self.objects, self.map_edges, self.obj_classes)
 
         ##### 6. [끝] 주기적 "누적 object" 후처리
 
-        if cfg.save_objects_all_frames:
-            save_objects_for_frame(obj_all_frames_out_path, frame_idx, objects,
-                                   cfg.obj_min_detections, adjusted_pose,
-                                   color_path)
+        if self.cfg.save_objects_all_frames:
+            save_objects_for_frame(self.obj_all_frames_out_path, self.frame_idx,
+                                   self.objects, self.cfg.obj_min_detections,
+                                   agent_pose, color_path)
 
-        if cfg.vis_render:  # False
-            # render a frame, if needed (not really used anymore since rerun)
-            vis_render_image(
-                objects,
-                obj_classes,
-                obj_renderer,
-                image_original_pil,
-                adjusted_pose,
-                frames,
-                frame_idx,
-                color_path,
-                cfg.obj_min_detections,
-                cfg.class_agnostic,
-                cfg.debug_render,
-                is_final_frame,
-                cfg.exp_out_path,
-                cfg.exp_suffix,
-            )
         # periodically_save_pcd: False
-        if cfg.periodically_save_pcd and (
-                counter % cfg.periodically_save_pcd_interval == 0):
+        if self.cfg.periodically_save_pcd and (
+                self.counter % self.cfg.periodically_save_pcd_interval == 0):
             # save the pointcloud
-            save_pointcloud(exp_suffix=cfg.exp_suffix,
-                            exp_out_path=exp_out_path,
-                            cfg=cfg,
-                            objects=objects,
-                            obj_classes=obj_classes,
-                            latest_pcd_filepath=cfg.latest_pcd_filepath,
+            save_pointcloud(exp_suffix=self.cfg.exp_suffix,
+                            exp_out_path=self.exp_out_path,
+                            cfg=self.cfg,
+                            objects=self.objects,
+                            obj_classes=self.obj_classes,
+                            latest_pcd_filepath=self.cfg.latest_pcd_filepath,
                             create_symlink=True)
 
-        owandb.log({
-            "frame_idx": frame_idx,
-            "counter": counter,
-            "exit_early_flag": exit_early_flag,
-            "is_final_frame": is_final_frame,
+        self.owandb.log({
+            "frame_idx": self.frame_idx,
+            "counter": self.counter,
+            "exit_early_flag": self.exit_early_flag,
+            "is_final_frame": False,
         })
 
-        tracker.increment_total_objects(len(objects))
-        tracker.increment_total_detections(len(detection_list))
-        owandb.log({
-            "total_objects": tracker.get_total_objects(),
-            "objects_this_frame": len(objects),
-            "total_detections": tracker.get_total_detections(),
+        self.tracker.increment_total_objects(len(self.objects))
+        self.tracker.increment_total_detections(len(detection_list))
+        self.owandb.log({
+            "total_objects": self.tracker.get_total_objects(),
+            "objects_this_frame": len(self.objects),
+            "total_detections": self.tracker.get_total_detections(),
             "detections_this_frame": len(detection_list),
-            "frame_idx": frame_idx,
-            "counter": counter,
-            "exit_early_flag": exit_early_flag,
-            "is_final_frame": is_final_frame,
+            "frame_idx": self.frame_idx,
+            "counter": self.counter,
+            "exit_early_flag": self.exit_early_flag,
+            "is_final_frame": False,
         })
-
+        self.frame_idx += 1
         #################
 
     def wrap_up(self):
         # Consolidate captions
 
         ##### 7. [시작] 각 물체마다, caption 합치기
-        for object in objects:
+        for object in self.objects:
             obj_captions = object['captions'][:20]  # 첫 20개만 사용
-            consolidated_caption = consolidate_captions(openai_client,
+            consolidated_caption = consolidate_captions(self.openai_client,
                                                         obj_captions)
             object['consolidated_caption'] = consolidated_caption
         ##### 7. [끝] 각 물체마다, caption 합치기
 
         # exp_suffix: r_mapping_stride10
-        # exp_out_path: exps/r_mapping_stride10/
-        handle_rerun_saving(cfg.use_rerun, cfg.save_rerun, cfg.exp_suffix,
-                            exp_out_path)
+        # self.exp_out_path: exps/r_mapping_stride10/
+        handle_rerun_saving(self.cfg.use_rerun, self.cfg.save_rerun,
+                            self.cfg.exp_suffix, self.exp_out_path)
 
         # Save the pointcloud
-        if cfg.save_pcd:  # True
+        if self.cfg.save_pcd:  # True
             # exp_suffix: rerun_r_mapping_stride10
-            # exp_out_path: exps/r_mapping_stride10/
-            save_pointcloud(exp_suffix=cfg.exp_suffix,
-                            exp_out_path=exp_out_path,
-                            cfg=cfg,
-                            objects=objects,
-                            obj_classes=obj_classes,
-                            # ./latest_pcd_save
-                            latest_pcd_filepath=cfg.latest_pcd_filepath,
-                            create_symlink=True,
-                            edges=map_edges)
+            # self.exp_out_path: exps/r_mapping_stride10/
+            save_pointcloud(
+                exp_suffix=self.cfg.exp_suffix,
+                exp_out_path=self.exp_out_path,
+                cfg=self.cfg,
+                objects=self.objects,
+                obj_classes=self.obj_classes,
+                # ./latest_pcd_save
+                latest_pcd_filepath=self.cfg.latest_pcd_filepath,
+                create_symlink=True,
+                edges=self.map_edges)
 
-        if cfg.save_json:
-            save_obj_json(exp_suffix=cfg.exp_suffix,
-                          exp_out_path=exp_out_path,
-                          objects=objects)
+        if self.cfg.save_json:
+            save_obj_json(exp_suffix=self.cfg.exp_suffix,
+                          exp_out_path=self.exp_out_path,
+                          objects=self.objects)
 
-            save_edge_json(exp_suffix=cfg.exp_suffix,
-                           exp_out_path=exp_out_path,
-                           objects=objects,
-                           edges=map_edges)
+            save_edge_json(exp_suffix=self.cfg.exp_suffix,
+                           exp_out_path=self.exp_out_path,
+                           objects=self.objects,
+                           edges=self.map_edges)
 
         # Save metadata if all frames are saved
-        if cfg.save_objects_all_frames:
-            save_meta_path = obj_all_frames_out_path / f"meta.pkl.gz"
+        if self.cfg.save_objects_all_frames:
+            save_meta_path = self.obj_all_frames_out_path / f"meta.pkl.gz"
             with gzip.open(save_meta_path, "wb") as f:
                 pickle.dump(
                     {
-                        'cfg': cfg,
-                        'class_names': obj_classes.get_classes_arr(),
-                        'class_colors': obj_classes.get_class_color_dict_by_index(),
+                        'cfg':
+                            self.cfg,
+                        'class_names':
+                            self.obj_classes.get_classes_arr(),
+                        'class_colors':
+                            self.obj_classes.get_class_color_dict_by_index(),
                     }, f)
 
-        if run_detections:
-            if cfg.save_video:
-                save_video_detections(det_exp_path)
+        if self.run_detections:
+            if self.cfg.save_video:
+                save_video_detections(self.det_exp_path)
 
-        owandb.finish()
+        self.owandb.finish()
 
     def _save_objects_result(
             self, objects_info: List[Optional[segmentation_utils.ObjectInfo]]
@@ -968,6 +920,7 @@ adjusted_pose.shape: (4, 4)
         self.bounding_boxes_pub.publish(bounding_boxes)
 
     def _get_pose_data(self) -> Optional[np.ndarray]:
+        # TODO: robot pose를 받아오도록 수정
         try:
             camera_transform = self._tf_buffer.lookup_transform(
                 target_frame=self._target_frame,
@@ -1018,11 +971,11 @@ self.rgb_dist_coeffs: [          0           0           0           0          
         dist_coeffs = np.array(msg.d)  # (5,) # TODO: 전부 0으로 나오므로, 의미가 없음.
         camera_matrix = np.array(msg.k).reshape(3, 3)
         """
-self.intrinsic: [[     209.05           0      212.36]
+self.intrinsics: [[     209.05           0      212.36]
  [          0      209.05      118.82]
  [          0           0           1]]        
         """
-        self.intrinsic = camera_matrix
+        self.intrinsics = camera_matrix
         """
 self.depth_dist_coeffs: [          0           0           0           0           0]
         """
@@ -1041,7 +994,10 @@ self.depth_dist_coeffs: [          0           0           0           0        
         img = cv2.imdecode(img, cv2.IMREAD_ANYCOLOR) * rescale_depth / 255.0
         return img
 
-@hydra.main(version_base=None, config_path="../hydra_configs/", config_name="rerun_realtime_mapping")
+
+@hydra.main(version_base=None,
+            config_path="../hydra_configs/",
+            config_name="rerun_realtime_mapping")
 def main(cfg: DictConfig):
     # ROS2 초기화
     rclpy.init()
@@ -1060,9 +1016,6 @@ def main(cfg: DictConfig):
             ros2_bridge.destroy_node()
             rclpy.shutdown()
             visualization_utils.create_gif_from_images()
-
-
-
 
 
 if __name__ == "__main__":
@@ -1100,13 +1053,3 @@ if __name__ == "__main__":
                         help="Device to use for computation (cpu or cuda)")
     args = parser.parse_args()
     main()
-
-
-
-
-
-
-
-
-
-

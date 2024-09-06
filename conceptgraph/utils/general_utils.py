@@ -448,13 +448,16 @@ def filter_detections(
 def get_vlm_annotated_image_path(
     det_exp_vis_path,
     color_path,
+frame_idx = None,
     w_edges=False,
     suffix="annotated_for_vlm.jpg",
 ):
-
     # Define suffixes based on whether edges are included
     if w_edges:
         suffix = suffix.replace(".jpg", "_w_edges.jpg")
+    if frame_idx:
+        return os.path.join(det_exp_vis_path, f"{frame_idx:06d}_{suffix}")
+
 
     # Create the file path
     vis_save_path = (det_exp_vis_path / color_path.name).with_suffix(
@@ -464,7 +467,7 @@ def get_vlm_annotated_image_path(
 
 def make_vlm_edges_and_captions(image, curr_det, obj_classes,
                                 detection_class_labels, det_exp_vis_path,
-                                color_path, make_edges_flag, openai_client):
+                                color_path, make_edges_flag, openai_client, frame_idx = None):
     """
     Process detections by filtering, annotating, and extracting object relationships.
 
@@ -506,9 +509,9 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes,
         # color_path
         # Datasets/Replica/room0/results/frame000000.jpg
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
-            det_exp_vis_path, color_path)
+            det_exp_vis_path, color_path, frame_idx)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
-            det_exp_vis_path, color_path, w_edges=True)
+            det_exp_vis_path, color_path, frame_idx, w_edges=True)
         """ annotate_for_vlm
         이미지 위에 탐지된 객체들의 위치와 라벨을 오버레이(overlay)하는 방식으로 이루어짐
         객체에 부여된 라벨들은 숫자와 함께 고유하게 표시되며, 

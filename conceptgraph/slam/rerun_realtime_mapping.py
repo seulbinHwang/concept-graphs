@@ -70,8 +70,6 @@ python -m conceptgraph.slam.rerun_realtime_mapping
 # Disable torch gradient computation
 torch.set_grad_enabled(False)
 RUN_OPEN_API = False
-
-
 """
 이 함수는 **Hydra**라는 도구를 사용해 **설정 파일을 기반으로 작업을 실행**하는 역할
     - `@hydra.main`이라는 데코레이터를 사용해 Hydra 설정 파일을 불러와 프로그램의 실행 환경을 설정
@@ -88,6 +86,8 @@ RUN_OPEN_API = False
         - 이 객체를 통해 설정값을 접근하고, 프로그램의 동작을 제어할 수 있습니다.
 
 """
+
+
 # A logger for this file
 @hydra.main(version_base=None,
             config_path="../hydra_configs/",
@@ -118,11 +118,11 @@ def main(cfg: DictConfig):
         basedir=cfg.dataset_root,
         # room0
         sequence=cfg.scene_id,
-        start=cfg.start, # 0
-        end=cfg.end, # -1
-        stride=cfg.stride, # 50
-        desired_height=cfg.image_height, # None # 680
-        desired_width=cfg.image_width, # None # 1200
+        start=cfg.start,  # 0
+        end=cfg.end,  # -1
+        stride=cfg.stride,  # 50
+        desired_height=cfg.image_height,  # None # 680
+        desired_width=cfg.image_width,  # None # 1200
         device="cpu",
         dtype=torch.float,
     )
@@ -226,7 +226,7 @@ def main(cfg: DictConfig):
         # Read info about current frame from dataset
         # color image
         color_path = Path(dataset.color_paths[frame_idx])
-        image_original_pil = Image.open(color_path) # 필요 없음
+        image_original_pil = Image.open(color_path)  # 필요 없음
         # color and depth tensors, and camera instrinsics matrix
         """
         color_path -> image_original_pil (PIL) # 필요 없음
@@ -346,7 +346,6 @@ def main(cfg: DictConfig):
                 clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
             ##### 2. [끝] CLIP feature를 계산
 
-
             # increment total object detections
             tracker.increment_total_detections(len(curr_det.xyxy))
 
@@ -437,7 +436,7 @@ def main(cfg: DictConfig):
 
         orr_log_rgb_image(color_path)
         orr_log_annotated_image(color_path, det_exp_vis_path)
-        orr_log_depth_image(depth_tensor) # resized
+        orr_log_depth_image(depth_tensor)  # resized
         orr_log_vlm_image(vis_save_path_for_vlm)
         orr_log_vlm_image(vis_save_path_for_vlm_edges, label="w_edges")
         """
@@ -507,10 +506,10 @@ adjusted_pose.shape: (4, 4)
                 depth_array=depth_array,
                 masks=grounded_obs['mask'],
                 cam_K=intrinsics.cpu().numpy()[:3, :3],  # Camera intrinsics
-                image_rgb=image_rgb,
+                image_rgb=image_rgb,  # None 으로 해도 됨 (pointcloud 색깔 구하려는 것)
                 trans_pose=adjusted_pose,
                 min_points_threshold=cfg.min_points_threshold,  # 16
-            # overlap # "iou", "giou", "overlap"
+                # overlap # "iou", "giou", "overlap"
                 spatial_sim_type=cfg.spatial_sim_type,  # overlap
                 obj_pcd_max_points=cfg.obj_pcd_max_points,  # 5000
                 device=cfg.device,
@@ -528,14 +527,14 @@ adjusted_pose.shape: (4, 4)
                 ##### 3.1. [시작] pointclouds 필터링
                 obj["pcd"] = init_process_pcd(
                     pcd=obj["pcd"],
-                    downsample_voxel_size=cfg["downsample_voxel_size"], # 0.01
-                    dbscan_remove_noise=cfg["dbscan_remove_noise"], # True
-                    dbscan_eps=cfg["dbscan_eps"], # 0.1
-                    dbscan_min_points=cfg["dbscan_min_points"], # 10
+                    downsample_voxel_size=cfg["downsample_voxel_size"],  # 0.01
+                    dbscan_remove_noise=cfg["dbscan_remove_noise"],  # True
+                    dbscan_eps=cfg["dbscan_eps"],  # 0.1
+                    dbscan_min_points=cfg["dbscan_min_points"],  # 10
                 )
                 # point cloud를 filtering 했으니, bounding box를 다시 계산
                 obj["bbox"] = get_bounding_box(
-                    spatial_sim_type=cfg['spatial_sim_type'], # overlap
+                    spatial_sim_type=cfg['spatial_sim_type'],  # overlap
                     pcd=obj["pcd"],
                 )
                 ##### 3.1. [끝] pointclouds 필터링
@@ -569,8 +568,6 @@ adjusted_pose.shape: (4, 4)
             continue
         ##### 3. [끝] pointclouds 만들기
 
-
-
         ##### 4. [시작] 기존 object 들과 융합하기
 
         # if no objects yet in the map,
@@ -588,10 +585,10 @@ adjusted_pose.shape: (4, 4)
         ### compute similarities and then merge
         # spatial_sim : (새 검지 개수, 누적 물체 개수) -> 각 값은 det와 obj의 중첩 비율
         spatial_sim = compute_spatial_similarities(
-            spatial_sim_type=cfg['spatial_sim_type'], # overlap
+            spatial_sim_type=cfg['spatial_sim_type'],  # overlap
             detection_list=detection_list,
             objects=objects,
-            downsample_voxel_size=cfg['downsample_voxel_size']) # 0.01
+            downsample_voxel_size=cfg['downsample_voxel_size'])  # 0.01
         # visual_sim :  (새 검지 개수, 누적 물체 개수) -> 각 값은 det와 obj의 코싸인 유사도
         visual_sim = compute_visual_similarities(detection_list, objects)
 
@@ -608,31 +605,27 @@ adjusted_pose.shape: (4, 4)
         # match_indices: 길이는 "새 검지 개수"
         match_indices: List[Optional[int]] = match_detections_to_objects(
             agg_sim=agg_sim,
-            detection_threshold=cfg[
-                'sim_threshold']  # 1.2
+            detection_threshold=cfg['sim_threshold']  # 1.2
         )
 
         objects = merge_obj_matches(
             detection_list=detection_list,
             objects=objects,
             match_indices=match_indices,
-            downsample_voxel_size=cfg['downsample_voxel_size'], # 0.01
-            dbscan_remove_noise=cfg['dbscan_remove_noise'], # True
-            dbscan_eps=cfg['dbscan_eps'], # 0.1
-            dbscan_min_points=cfg['dbscan_min_points'], # 10
-            spatial_sim_type=cfg['spatial_sim_type'], # overlap
+            downsample_voxel_size=cfg['downsample_voxel_size'],  # 0.01
+            dbscan_remove_noise=cfg['dbscan_remove_noise'],  # True
+            dbscan_eps=cfg['dbscan_eps'],  # 0.1
+            dbscan_min_points=cfg['dbscan_min_points'],  # 10
+            spatial_sim_type=cfg['spatial_sim_type'],  # overlap
             device=cfg['device']
             # Note: Removed 'match_method' and 'phys_bias' as they do not appear in the provided merge function
         )
         ##### 4. [끝] 기존 object 들과 융합하기
 
-
-
-
         # fix the class names for objects
         # they should be the most popular name, not the first name
         for idx, obj in enumerate(objects):
-            temp_class_name = obj["class_name"] # "sofa chair"
+            temp_class_name = obj["class_name"]  # "sofa chair"
             curr_obj_class_id_counter = Counter(obj['class_id'])
             most_common_class_id = curr_obj_class_id_counter.most_common(
                 1)[0][0]
@@ -640,7 +633,6 @@ adjusted_pose.shape: (4, 4)
             )[most_common_class_id]
             if temp_class_name != most_common_class_name:
                 obj["class_name"] = most_common_class_name
-
 
         ##### 5. [시작] edge 계산하기
 
@@ -669,26 +661,26 @@ adjusted_pose.shape: (4, 4)
 
         # Denoising
         if processing_needed(
-            # Run DBSCAN every k frame. This operation is heavy
-                cfg["denoise_interval"], # 20
-                cfg["run_denoise_final_frame"], # True
+                # Run DBSCAN every k frame. This operation is heavy
+                cfg["denoise_interval"],  # 20
+                cfg["run_denoise_final_frame"],  # True
                 frame_idx,
                 is_final_frame,
         ):
             objects = measure_time(denoise_objects)(
-                downsample_voxel_size=cfg['downsample_voxel_size'], # 0.01
-                dbscan_remove_noise=cfg['dbscan_remove_noise'], # True
-                dbscan_eps=cfg['dbscan_eps'], # 0.1
-                dbscan_min_points=cfg['dbscan_min_points'], # 10
-                spatial_sim_type=cfg['spatial_sim_type'], # overlap
+                downsample_voxel_size=cfg['downsample_voxel_size'],  # 0.01
+                dbscan_remove_noise=cfg['dbscan_remove_noise'],  # True
+                dbscan_eps=cfg['dbscan_eps'],  # 0.1
+                dbscan_min_points=cfg['dbscan_min_points'],  # 10
+                spatial_sim_type=cfg['spatial_sim_type'],  # overlap
                 device=cfg['device'],
                 objects=objects)
 
         # Filtering
         if processing_needed(
-            # Filter objects that have too few associations or are too small
-                cfg["filter_interval"], # 5
-                cfg["run_filter_final_frame"], # True
+                # Filter objects that have too few associations or are too small
+                cfg["filter_interval"],  # 5
+                cfg["run_filter_final_frame"],  # True
                 frame_idx,
                 is_final_frame,
         ):
@@ -700,9 +692,9 @@ adjusted_pose.shape: (4, 4)
 
         # Merging
         if processing_needed(
-            # Merge objects based on geometric and semantic similarity
-                cfg["merge_interval"], # 5
-                cfg["run_merge_final_frame"], # True
+                # Merge objects based on geometric and semantic similarity
+                cfg["merge_interval"],  # 5
+                cfg["run_merge_final_frame"],  # True
                 frame_idx,
                 is_final_frame,
         ):
@@ -724,13 +716,12 @@ adjusted_pose.shape: (4, 4)
 
         ##### 6. [끝] 주기적 "누적 object" 후처리
 
-
         if cfg.save_objects_all_frames:
             save_objects_for_frame(obj_all_frames_out_path, frame_idx, objects,
                                    cfg.obj_min_detections, adjusted_pose,
                                    color_path)
 
-        if cfg.vis_render: # False
+        if cfg.vis_render:  # False
             # render a frame, if needed (not really used anymore since rerun)
             vis_render_image(
                 objects,
@@ -785,11 +776,10 @@ adjusted_pose.shape: (4, 4)
 
     ##### 7. [시작] 각 물체마다, caption 합치기
     for object in objects:
-        obj_captions = object['captions'][:20] # 첫 20개만 사용
+        obj_captions = object['captions'][:20]  # 첫 20개만 사용
         consolidated_caption = consolidate_captions(openai_client, obj_captions)
         object['consolidated_caption'] = consolidated_caption
     ##### 7. [끝] 각 물체마다, caption 합치기
-
 
     # exp_suffix: r_mapping_stride10
     # exp_out_path: exps/r_mapping_stride10/
@@ -797,18 +787,19 @@ adjusted_pose.shape: (4, 4)
                         exp_out_path)
 
     # Save the pointcloud
-    if cfg.save_pcd: # True
+    if cfg.save_pcd:  # True
         # exp_suffix: rerun_r_mapping_stride10
         # exp_out_path: exps/r_mapping_stride10/
-        save_pointcloud(exp_suffix=cfg.exp_suffix,
-                        exp_out_path=exp_out_path,
-                        cfg=cfg,
-                        objects=objects,
-                        obj_classes=obj_classes,
-                        # ./latest_pcd_save
-                        latest_pcd_filepath=cfg.latest_pcd_filepath,
-                        create_symlink=True,
-                        edges=map_edges)
+        save_pointcloud(
+            exp_suffix=cfg.exp_suffix,
+            exp_out_path=exp_out_path,
+            cfg=cfg,
+            objects=objects,
+            obj_classes=obj_classes,
+            # ./latest_pcd_save
+            latest_pcd_filepath=cfg.latest_pcd_filepath,
+            create_symlink=True,
+            edges=map_edges)
 
     if cfg.save_json:
         save_obj_json(exp_suffix=cfg.exp_suffix,
