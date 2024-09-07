@@ -234,7 +234,7 @@ def show_box(box, ax, label=None):
 def vis_result_fast_on_depth(
     depth_image: np.ndarray,
     detections: sv.Detections,
-    classes: list[str],
+    classes: List{str],
     color: Union[Color , ColorPalette] = ColorPalette.default(),
     instance_random_color: bool = False,
     draw_bbox: bool = True,
@@ -287,7 +287,7 @@ def vis_result_fast_on_depth(
 
 def old_filter_detections(
     detections: sv.Detections,
-    classes: list[str],
+    classes: List{str],
     top_x_detections: Optional[int] = None,
     confidence_threshold: float = 0.0,
     given_labels: Optional[list[str]] = None
@@ -560,7 +560,7 @@ class CustomBoxAnnotator(sv.BoxAnnotator):
 
 def vis_result_for_vlm(image: np.ndarray,
                        detections: sv.Detections,
-                       labels: list[str],
+                       labels: List{str],
                        color: Union[Color , ColorPalette] = ColorPalette.default(),
                        draw_bbox: bool = True,
                        thickness: int = 2,
@@ -596,7 +596,7 @@ def vis_result_for_vlm(image: np.ndarray,
 def vis_result_fast(
     image: np.ndarray,
     detections: sv.Detections,
-    classes: list[str],
+    classes: List{str],
     color: Union[Color , ColorPalette] = ColorPalette.default(),
     instance_random_color: bool = False,
     draw_bbox: bool = True,

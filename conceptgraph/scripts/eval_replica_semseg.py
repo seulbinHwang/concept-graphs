@@ -59,7 +59,7 @@ def get_parser():
 def eval_replica(
         scene_id: str,
         scene_id_: str,
-        class_names: list[str],
+        class_names: List{str],
         class_feats: torch.Tensor,
         args: argparse.Namespace,
         class_all2existing: torch.Tensor,
