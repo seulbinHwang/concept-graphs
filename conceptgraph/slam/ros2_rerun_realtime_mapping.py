@@ -634,8 +634,7 @@ camera_pose.shape: (4, 4)
                 obj_pcd_max_points=self.cfg.obj_pcd_max_points,  # 5000
                 device=self.cfg.device,
             )
-        if not RUN_AFTER:
-            return
+
         for obj in obj_pcds_and_bboxes:
             if obj:
                 # obj: {'pcd': pcd, 'bbox': bbox}
@@ -685,7 +684,8 @@ camera_pose.shape: (4, 4)
         detection_list = make_detection_list_from_pcd_and_gobs(
             obj_pcds_and_bboxes, grounded_obs, color_path, self.obj_classes,
             self.frame_idx)
-
+        if not RUN_AFTER:
+            return
         if len(detection_list) == 0:  # no detections, skip
             return
         ##### 3. [끝] pointclouds 만들기
