@@ -320,8 +320,10 @@ class RealtimeHumanSegmenterNode(Node):
         if self.intrinsics is None:
             return
 
-        rgb_array = self.rgb_callback(rgb_msg)
+        rgb_array, rgb_builtin_time = self.rgb_callback(rgb_msg)
         depth_array, depth_builtin_time = self.depth_callback(depth_msg)
+        print("rgb_builtin_time:", rgb_builtin_time, "depth_builtin_time:",
+              depth_builtin_time)
         agent_pose = self._get_pose_data(depth_builtin_time)
         if agent_pose is None:
             return
@@ -929,7 +931,8 @@ camera_pose.shape: (4, 4)
             print("[pose tf listener]ExtrapolationException")
         return None
 
-    def rgb_callback(self, msg: CompressedImage) -> np.ndarray:
+    def rgb_callback(self, msg: CompressedImage) -> Tuple[np.ndarray, Time]:
+        builtin_time = msg.header.stamp
         # 메시지에서 이미지 데이터를 읽어서 OpenCV 이미지로 변환
         np_array = np.frombuffer(msg.data, np.uint8)
         rgb_array = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
@@ -938,7 +941,7 @@ camera_pose.shape: (4, 4)
         # # frombuffer를 사용하면,
         # # 바이너리 데이터를 복사하지 않고, 직접 배열로 변환할 수 있어 메모리 사용량을 최소화
         # rgb_array = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
-        return rgb_array
+        return rgb_array, builtin_time
 
     def color_camera_info_callback(
             self, msg: CameraInfo) -> Tuple[np.ndarray, np.ndarray]:
