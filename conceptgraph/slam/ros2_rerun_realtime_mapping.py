@@ -188,7 +188,7 @@ class RealtimeHumanSegmenterNode(Node):
 
         self.counter = 0
         ###################################
-        self.frame_idx = 0
+        self.frame_idx = -1
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
         self._frame_idx = 0
@@ -289,6 +289,8 @@ class RealtimeHumanSegmenterNode(Node):
 
     def sync_callback(self, rgb_msg: CompressedImage,
                       depth_msg: CompressedImage):
+        self.frame_idx += 1
+
         color_path = None
         # if self.intrinsics is None:
         #     return
@@ -818,7 +820,6 @@ agent_pose.shape: (4, 4)
 
         self.tracker.increment_total_objects(len(self.objects))
         self.tracker.increment_total_detections(len(detection_list))
-        self.frame_idx += 1
         #################
 
     def wrap_up(self):
