@@ -127,7 +127,7 @@ def orr_log_camera(intrinsics, adjusted_pose, prev_adjusted_pose, img_width,
                         from_parent=False))
 
     # Log trajectory if not the first frame
-    if frame_idx != 0:
+    if frame_idx != 0 and prev_adjusted_pose is not None:
         prev_translation = prev_adjusted_pose[:3, 3].tolist()
         prev_quaternion = rotation_matrix_to_quaternion(
             prev_adjusted_pose[:3, :3])
