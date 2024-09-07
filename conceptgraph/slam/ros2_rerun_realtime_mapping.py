@@ -434,6 +434,9 @@ class RealtimeHumanSegmenterNode(Node):
     - vis_save_path_for_vlm
 
             """
+            if curr_det.xyxy.shape[0] == 0:
+                print("No detections found in the image")
+                return
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
                 rgb_array, curr_det, self.obj_classes, detection_class_labels,
                 self.det_exp_vis_path, color_path, self.cfg.make_edges,
