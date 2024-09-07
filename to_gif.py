@@ -3,7 +3,7 @@ from PIL import Image
 
 
 def create_gif_from_images(input_folder: str, output_gif: str,
-                           duration: int = 500) -> None:
+                           duration: int = 100) -> None:
     """
     Create a GIF from all .jpg images in a folder, sorted by their numeric filenames.
 
