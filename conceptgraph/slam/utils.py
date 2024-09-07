@@ -354,7 +354,7 @@ def get_bounding_box(
     if ("accurate" in spatial_sim_type or
             "overlap" in spatial_sim_type) and len(pcd.points) >= 4:
         try:
-            return pcd.get_oriented_bounding_box() #(robust=True)
+            return pcd.get_oriented_bounding_box()  #(robust=True)
         except RuntimeError as e:
             print(f"Met {e}, use axis aligned bounding box instead")
             return pcd.get_axis_aligned_bounding_box()
@@ -1328,18 +1328,12 @@ def transform_detection_list(
 def make_detection_list_from_pcd_and_gobs(obj_pcds_and_bboxes, gobs, color_path,
                                           obj_classes, image_idx):
     """
-이 함수는 **3D 포인트 클라우드**와 **Grounded Observations (gobs)**라는 입력 데이터를 사용해
+    **3D 포인트 클라우드**와 **Grounded Observations (gobs)** 입력 데이터를 사용해
     **객체 감지 리스트**를 생성하는 역할을 합니다.
 감지된 각 객체에 대한 다양한 정보를 추출하고,
-    이를 **`DetectionList`**라는 구조로 변환하여 관리할 수 있게 합니다.
-이를 통해 후속 처리나 분석에서 객체 데이터를 효율적으로 사용할 수 있도록 준비합니다.
+    이를 **`DetectionList`**라는 구조로 변환하여 관리
+이를 통해 후속 처리(객체 추적, 병합, 시각화 등) 에서 객체 데이터를 효율적으로 사용할 수 있도록 준비
 
-### 1. **주요 역할**
-- **감지된 객체 정보**를 `DetectionList` 형태로 변환해 저장합니다.
-    이 리스트는 후속 작업(객체 추적, 병합, 시각화 등)에 사용될 수 있는
-        **구조화된 객체 데이터**를 담고 있습니다.
-
-### 2. **세부 로직**
 
 1. **객체 정보 처리**:
    - 입력 데이터에서 각 객체에 대한 정보를 가져와 `DetectionList`에 추가
@@ -1350,7 +1344,7 @@ def make_detection_list_from_pcd_and_gobs(obj_pcds_and_bboxes, gobs, color_path,
 2. **배경 객체 처리**:
    - 각 객체가 **배경 객체**인지 확인
    - 객체가 특정 **배경 클래스**에 속하는 경우, `is_background` 필드에 그 정보를 저장
-    - 이를 통해 배경 객체는 필요에 따라 다른 방식으로 처리할 수 있습니다.
+    - 이를 통해 배경 객체는 필요에 따라 다른 방식으로 처리할 수 있음
 
 3. **객체 수 추적**:
    - 각 객체가 추가될 때마다, **객체 수**를 관리하는 **`tracker`**가 업데이트.

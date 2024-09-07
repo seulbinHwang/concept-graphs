@@ -100,7 +100,7 @@ class RealtimeHumanSegmenterNode(Node):
         super().__init__('ros2_bridge')
         self.cfg = cfg
         self.args = args
-        self._target_frame = "odom" #"vl"
+        self._target_frame = "odom"  #"vl"
         self._source_frame = "base_link"
 
         # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
@@ -609,7 +609,6 @@ class RealtimeHumanSegmenterNode(Node):
         # this helps make sure things like 베개 on 소파 are separate objects.
         grounded_obs['mask'] = mask_subtract_contained(grounded_obs['xyxy'],
                                                        grounded_obs['mask'])
-
         """
 -----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------
 depth_array.shape: (680, 1200)
@@ -624,8 +623,7 @@ camera_pose.shape: (4, 4)
             detections_to_obj_pcd_and_bbox)(
                 depth_array=depth_array,
                 masks=grounded_obs['mask'],
-                cam_K=self.intrinsics
-                [:3, :3],  # Camera intrinsics
+                cam_K=self.intrinsics[:3, :3],  # Camera intrinsics
                 image_rgb=rgb_array_,
                 trans_pose=camera_pose,
                 min_points_threshold=self.cfg.min_points_threshold,  # 16
@@ -639,10 +637,10 @@ camera_pose.shape: (4, 4)
             if obj:
                 # obj: {'pcd': pcd, 'bbox': bbox}
                 """
-                포인트 클라우드를 voxel (0.01m)로 다운샘플링하고,
-                dbscan clustering기반으로
+                포인트 클라우드를 voxel (0.01m)로 다운샘플링 하고,
+                dbscan clustering 기반으로
                     노이즈를 제거하여 클러스터링을 통해 중요한 포인트만 남기는 것
-                    0.1m 거리 내의 cluster을 모으는데, 최소 10개 포인트가 있어야 한다.
+                    0.1m 거리 내의 cluster 을 모으는데, 최소 10개 포인트가 있어야 한다.
                 """
                 ##### 3.1. [시작] pointclouds 필터링
                 obj["pcd"] = init_process_pcd(
@@ -969,10 +967,9 @@ self.depth_dist_coeffs: [          0           0           0           0        
         self.depth_dist_coeffs = dist_coeffs
         return camera_matrix, dist_coeffs
 
-    def depth_callback(
-            self,
-            msg: CompressedImage,
-            rescale_depth: float = 4.) -> Tuple[np.ndarray, Time]:
+    def depth_callback(self,
+                       msg: CompressedImage,
+                       rescale_depth: float = 4.) -> Tuple[np.ndarray, Time]:
         # np_array = np.frombuffer(msg.data, np.uint8)
         # depth_array = cv2.imdecode(np_array, cv2.IMREAD_ANYDEPTH)
         # TODO: check
