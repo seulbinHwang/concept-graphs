@@ -322,8 +322,6 @@ class RealtimeHumanSegmenterNode(Node):
 
         rgb_array, rgb_builtin_time = self.rgb_callback(rgb_msg)
         depth_array, depth_builtin_time = self.depth_callback(depth_msg)
-        print("rgb_builtin_time:", rgb_builtin_time, "depth_builtin_time:",
-              depth_builtin_time)
         agent_pose = self._get_pose_data(depth_builtin_time)
         if agent_pose is None:
             return
