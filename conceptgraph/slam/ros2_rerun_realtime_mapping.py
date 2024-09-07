@@ -456,7 +456,7 @@ class RealtimeHumanSegmenterNode(Node):
                 self.clip_preprocess, self.clip_tokenizer,
                 self.obj_classes.get_classes_arr(), self.cfg.device)
             det_exp_path_cropped = self.det_exp_path / "cropped_images"
-            if len(image_crops) > 2:
+            if len(image_crops) > 1:
                 self.save_cropped_images(image_crops, det_exp_path_cropped)
                 raise NotImplementedError
             ##### 2. [끝] CLIP feature를 계산
