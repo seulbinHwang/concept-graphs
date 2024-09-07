@@ -46,7 +46,7 @@ def to_scalar(d) -> Union[int, float]: # : np.ndarray | torch.Tensor | float
 
 
 def from_intrinsics_matrix(
-        K: torch.Tensor) -> tuple[float, float, float, float]:
+        K: torch.Tensor) -> Tuple[float, float, float, float]:
     '''
     Get fx, fy, cx, cy from the intrinsics matrix
     
