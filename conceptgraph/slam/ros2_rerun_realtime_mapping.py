@@ -142,7 +142,7 @@ class RealtimeHumanSegmenterNode(Node):
         # check_run_detections: s_detections_stride10 폴더가 있으면 실시하지 않음
         self.run_detections = check_run_detections(cfg.force_detection,
                                                    self.det_exp_path)
-        self.run_detections = False
+        self.run_detections = True
         # det_exp_pkl_path: exps/s_detections_stride10/detections
         self.det_exp_pkl_path = get_det_out_path(self.det_exp_path)
         # det_exp_vis_path: exps/s_detections_stride10/vis
