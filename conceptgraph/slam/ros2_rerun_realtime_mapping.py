@@ -319,10 +319,10 @@ class RealtimeHumanSegmenterNode(Node):
         # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm.jpg
         # CHECK: 내가 수정했음
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
-            self.det_exp_vis_path, color_path, self.frame_idx)
+            self.det_exp_vis_path, color_path, frame_idx=self.frame_idx)
         print("vis_save_path_for_vlm:", vis_save_path_for_vlm)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
-            self.det_exp_vis_path, color_path, self.frame_idx, w_edges=True)
+            self.det_exp_vis_path, color_path, frame_idx=self.frame_idx, w_edges=True)
         print("vis_save_path_for_vlm_edges:", vis_save_path_for_vlm_edges)
 
         if self.run_detections:

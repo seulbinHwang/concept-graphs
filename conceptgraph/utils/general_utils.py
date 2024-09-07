@@ -504,7 +504,7 @@ def get_vlm_annotated_image_path(
     # Define suffixes based on whether edges are included
     if w_edges:
         suffix = suffix.replace(".jpg", "_w_edges.jpg")
-    if frame_idx:
+    if frame_idx is not None:
         return os.path.join(det_exp_vis_path, f"{frame_idx:06d}_{suffix}")
 
     # Create the file path
