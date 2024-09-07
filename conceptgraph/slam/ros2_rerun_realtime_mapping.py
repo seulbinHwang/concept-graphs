@@ -103,7 +103,6 @@ class RealtimeHumanSegmenterNode(Node):
         self._target_frame = "vl"
         self._source_frame = "base_link"
 
-
         # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
         self.tracker = MappingTracker()
         # 만약 Rerun이 설치되어 있지 않거나, 사용하지 않는 경우, 이 변수는 None입니다.
@@ -222,8 +221,8 @@ class RealtimeHumanSegmenterNode(Node):
         self.ts.registerCallback(self.sync_callback)
 
     @staticmethod
-    def save_cropped_images(image_crops: List[Image.Image],
-                            folder_path: str, frame_idx) -> None:
+    def save_cropped_images(image_crops: List[Image.Image], folder_path: str,
+                            frame_idx) -> None:
         # 폴더가 존재하지 않으면 생성
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
@@ -277,7 +276,8 @@ class RealtimeHumanSegmenterNode(Node):
         translation_matrix = tf_transformations.translation_matrix(
             camera_translation)
         # IMPORTANT !!! world_coord = camera_pose_wrt_agent @ camera_coord
-        (camera_pose_wrt_agent) = translation_matrix @ rotation_matrix @ np.linalg.inv(
+        (camera_pose_wrt_agent
+        ) = translation_matrix @ rotation_matrix @ np.linalg.inv(
             axis_transpose_matrix)
         # camera_pose_wrt_agent shape :
         return camera_pose_wrt_agent
@@ -321,8 +321,8 @@ class RealtimeHumanSegmenterNode(Node):
             return
 
         rgb_array = self.rgb_callback(rgb_msg)
-        depth_array, depth_builtin_time = self.depth_callback(depth_msg)
-        agent_pose = self._get_pose_data(depth_builtin_time)
+        depth_array, depth_rclpy_time = self.depth_callback(depth_msg)
+        agent_pose = self._get_pose_data(depth_rclpy_time)
         if agent_pose is None:
             return
         camera_pose = agent_pose @ self._camera_to_agent
@@ -352,7 +352,10 @@ class RealtimeHumanSegmenterNode(Node):
             self.det_exp_vis_path, color_path, frame_idx=self.frame_idx)
         print("vis_save_path_for_vlm:", vis_save_path_for_vlm)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
-            self.det_exp_vis_path, color_path, frame_idx=self.frame_idx, w_edges=True)
+            self.det_exp_vis_path,
+            color_path,
+            frame_idx=self.frame_idx,
+            w_edges=True)
         print("vis_save_path_for_vlm_edges:", vis_save_path_for_vlm_edges)
 
         if self.run_detections:
@@ -369,7 +372,7 @@ class RealtimeHumanSegmenterNode(Node):
             ]
             # 원본 size 기준으로 xyxy 가 나온다는 것을 확인함
             xyxy_tensor = results[0].boxes.xyxy
-            xyxy_np = xyxy_tensor.cpu().numpy() # (N, 4)
+            xyxy_np = xyxy_tensor.cpu().numpy()  # (N, 4)
 
             # if there are detections,
             # Get Masks Using SAM or MobileSAM
@@ -539,7 +542,6 @@ class RealtimeHumanSegmenterNode(Node):
                     self.det_exp_pkl_path / vis_save_path.stem, results)
 
         ########
-
         """
 카메라의 내재적(intrinsic) 및 외재적(extrinsic) 파라미터를 로깅하는 역할
 특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
@@ -909,11 +911,7 @@ camera_pose.shape: (4, 4)
             if self.cfg.save_video:
                 save_video_detections(self.det_exp_path)
 
-
-    def _get_pose_data(self,
-                       time_msg: Time
-                       ) -> Optional[np.ndarray]:
-        # TODO: robot pose를 받아오도록 수정
+    def _get_pose_data(self, time_msg: rclpy.time.Time) -> Optional[np.ndarray]:
         try:
             vl_transform = self._tf_buffer.lookup_transform(
                 target_frame=self._target_frame,
@@ -975,18 +973,21 @@ self.depth_dist_coeffs: [          0           0           0           0        
         self.depth_dist_coeffs = dist_coeffs
         return camera_matrix, dist_coeffs
 
-    def depth_callback(self,
-                       msg: CompressedImage,
-                       rescale_depth: float = 4.) -> Tuple[np.ndarray, Time]:
+    def depth_callback(
+            self,
+            msg: CompressedImage,
+            rescale_depth: float = 4.) -> Tuple[np.ndarray, rclpy.time.Time]:
         # np_array = np.frombuffer(msg.data, np.uint8)
         # depth_array = cv2.imdecode(np_array, cv2.IMREAD_ANYDEPTH)
         # TODO: check
-        timestamp = msg.header.stamp.sec
+        builtin_time = msg.header.stamp.sec
+        rclpy_time = rclpy.time.Time(seconds=builtin_time.sec,
+                                     nanoseconds=builtin_time.nanosec)
         img = np.ndarray(shape=(1, len(msg.data)),
                          dtype="uint8",
                          buffer=msg.data)
         img = cv2.imdecode(img, cv2.IMREAD_ANYCOLOR) * rescale_depth / 255.0
-        return img, timestamp
+        return img, rclpy_time
 
 
 @hydra.main(version_base=None,

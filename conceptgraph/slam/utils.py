@@ -26,7 +26,7 @@ from conceptgraph.utils.ious import compute_3d_iou, compute_3d_iou_accurate_batc
 tracker = MappingTracker()
 
 
-def to_scalar(d) -> Union[int, float]: # : np.ndarray | torch.Tensor | float
+def to_scalar(d) -> Union[int, float]:  # : np.ndarray | torch.Tensor | float
     '''
     Convert the d to a scalar
     '''

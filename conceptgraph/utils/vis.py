@@ -28,8 +28,8 @@ class OnlineObjectRenderer():
     '''
 
     def __init__(self,
-                 view_param: Union[str , dict],
-                 base_objects: Optional[MapObjectList]= None,
+                 view_param: Union[str, dict],
+                 base_objects: Optional[MapObjectList] = None,
                  gray_map: bool = False) -> None:
         # If the base objects are provided, we will visualize them
         if base_objects is not None:
@@ -85,7 +85,7 @@ class OnlineObjectRenderer():
     def step(
         self,
         image: Image.Image,
-        pcds: Optional[List[o3d.geometry.PointCloud]]= None,
+        pcds: Optional[List[o3d.geometry.PointCloud]] = None,
         pcd_colors: Optional[np.ndarray] = None,
         est_pose: Optional[np.ndarray] = None,
         gt_pose: Optional[np.ndarray] = None,
@@ -235,7 +235,7 @@ def vis_result_fast_on_depth(
     depth_image: np.ndarray,
     detections: sv.Detections,
     classes: List[str],
-    color: Union[Color , ColorPalette] = ColorPalette.default(),
+    color: Union[Color, ColorPalette] = ColorPalette.default(),
     instance_random_color: bool = False,
     draw_bbox: bool = True,
 ) -> np.ndarray:
@@ -561,7 +561,8 @@ class CustomBoxAnnotator(sv.BoxAnnotator):
 def vis_result_for_vlm(image: np.ndarray,
                        detections: sv.Detections,
                        labels: List[str],
-                       color: Union[Color , ColorPalette] = ColorPalette.default(),
+                       color: Union[Color,
+                                    ColorPalette] = ColorPalette.default(),
                        draw_bbox: bool = True,
                        thickness: int = 2,
                        text_scale: float = 0.3,
@@ -597,7 +598,7 @@ def vis_result_fast(
     image: np.ndarray,
     detections: sv.Detections,
     classes: List[str],
-    color: Union[Color , ColorPalette] = ColorPalette.default(),
+    color: Union[Color, ColorPalette] = ColorPalette.default(),
     instance_random_color: bool = False,
     draw_bbox: bool = True,
 ) -> np.ndarray:

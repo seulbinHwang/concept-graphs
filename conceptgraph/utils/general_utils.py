@@ -446,7 +446,7 @@ def filter_detections(
             print(
                 f"Removing {classes.get_classes_arr()[curr_class_id]} because it is a background class, specifically {classes.bg_classes}."
             )
-            keep = True #False
+            keep = True  #False
 
         if keep:
             filtered_detections.append(current_det)
@@ -543,7 +543,6 @@ def make_vlm_edges_and_captions(image,
     edges = []
     captions = []
     edge_image = None
-
 
     if make_edges_flag:
         # det_exp_vis_path:
