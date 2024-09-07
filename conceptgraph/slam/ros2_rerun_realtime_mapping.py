@@ -215,6 +215,21 @@ class RealtimeHumanSegmenterNode(Node):
             [rgb_sub, depth_sub], queue_size=10, slop=0.1)
         self.ts.registerCallback(self.sync_callback)
 
+    @staticmethod
+    def save_cropped_images(image_crops: List[Image.Image],
+                            folder_path: str) -> None:
+        # 폴더가 존재하지 않으면 생성
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+
+        # 각각의 이미지들을 폴더에 저장
+        for i, cropped_image in enumerate(image_crops):
+            # 이미지 파일 이름을 생성 (예: crop_0.png, crop_1.png ...)
+            image_path = os.path.join(folder_path, f"crop_{i}.png")
+
+            # 이미지 저장
+            cropped_image.save(image_path)
+
     def _set_rgbd_info_subscribers(self):
         color_camera_info_topic_name = \
             f"realsense{self.args.realsense_idx}/color_camera_info"
@@ -436,12 +451,14 @@ class RealtimeHumanSegmenterNode(Node):
             ##### 2. [시작] CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
             # TODO: check "rgb_array" 가 맞는지
-            if not RUN_MIDDLE:
-                return
             image_crops, image_feats, text_feats = compute_clip_features_batched(
                 rgb_array, curr_det, self.clip_model,
                 self.clip_preprocess, self.clip_tokenizer,
                 self.obj_classes.get_classes_arr(), self.cfg.device)
+            det_exp_path_cropped = self.det_exp_path / "cropped_images"
+            if len(image_crops) > 2:
+                self.save_cropped_images(image_crops, det_exp_path_cropped)
+                raise NotImplementedError
             ##### 2. [끝] CLIP feature를 계산
 
             # increment total object detections
@@ -469,7 +486,8 @@ class RealtimeHumanSegmenterNode(Node):
                 "captions": captions,  # len = 0
             }
             raw_grounded_obs = results
-
+            if not RUN_MIDDLE:
+                return
             # save the detections if needed
             # important
             if self.cfg.save_detections:
@@ -488,7 +506,7 @@ class RealtimeHumanSegmenterNode(Node):
                                  frame_name).with_suffix(".jpg")
                 # Visualize and save the annotated image
                 annotated_image, labels = vis_result_fast(
-                    image, curr_det, self.obj_classes.get_classes_arr())
+                    rgb_array, curr_det, self.obj_classes.get_classes_arr())
                 cv2.imwrite(str(vis_save_path), annotated_image)
                 depth_image_rgb = cv2.normalize(depth_array, None, 0, 255,
                                                 cv2.NORM_MINMAX)
