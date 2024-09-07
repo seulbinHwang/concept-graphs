@@ -26,7 +26,7 @@ import open_clip
 from ultralytics import YOLO, SAM
 import supervision as sv
 from collections import Counter
-
+from builtin_interfaces.msg import Time
 # Local application/library specific imports
 from conceptgraph.utils.optional_rerun_wrapper import (
     OptionalReRun, orr_log_annotated_image, orr_log_camera, orr_log_depth_image,
@@ -100,6 +100,9 @@ class RealtimeHumanSegmenterNode(Node):
         super().__init__('ros2_bridge')
         self.cfg = cfg
         self.args = args
+        self._target_frame = "vl"
+        self._source_frame = "base_link"
+
 
         # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
         self.tracker = MappingTracker()
@@ -199,8 +202,6 @@ class RealtimeHumanSegmenterNode(Node):
         #                                                 bbox_2d_topic, 10)
 
         self._set_rgbd_info_subscribers()
-        self._target_frame = f"realsense{self.args.realsense_idx}"
-        self._source_frame = "base_link"
         self._set_rgbd_subscribers()
 
     def _set_rgbd_subscribers(self):
@@ -316,12 +317,13 @@ class RealtimeHumanSegmenterNode(Node):
         color_path = None
         if self.intrinsics is None:
             return
+
+        rgb_array = self.rgb_callback(rgb_msg)
+        depth_array, depth_builtin_time = self.depth_callback(depth_msg)
         # TODO: 세계 좌표계 기준 카메라 위치를 담도록 수정해야함
-        agent_pose = self._get_pose_data()
+        agent_pose = self._get_pose_data(depth_builtin_time)
         if agent_pose is None:
             return
-        rgb_array = self.rgb_callback(rgb_msg)
-        depth_array = self.depth_callback(depth_msg)
         #################
         self.tracker.curr_frame_idx = self.frame_idx
         self.counter += 1
@@ -906,16 +908,17 @@ agent_pose.shape: (4, 4)
                 save_video_detections(self.det_exp_path)
 
 
-    def _get_pose_data(self) -> Optional[np.ndarray]:
+    def _get_pose_data(self,
+                       time_msg: Time
+                       ) -> Optional[np.ndarray]:
         # TODO: robot pose를 받아오도록 수정
         try:
-            camera_transform = self._tf_buffer.lookup_transform(
+            vl_transform = self._tf_buffer.lookup_transform(
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
-                time=rclpy.time.Time(),
+                time=time_msg,
                 timeout=rclpy.duration.Duration(seconds=0.3))
-            print("camera_transform:", camera_transform)
-            camera_pose = self._transform_stamped_to_matrix(camera_transform)
+            camera_pose = self._transform_stamped_to_matrix(vl_transform)
             return camera_pose
         except LookupException:
             print("[pose tf listener]LookupException")
@@ -971,15 +974,16 @@ self.depth_dist_coeffs: [          0           0           0           0        
 
     def depth_callback(self,
                        msg: CompressedImage,
-                       rescale_depth: float = 4.) -> np.ndarray:
+                       rescale_depth: float = 4.) -> Tuple[np.ndarray, Time]:
         # np_array = np.frombuffer(msg.data, np.uint8)
         # depth_array = cv2.imdecode(np_array, cv2.IMREAD_ANYDEPTH)
         # TODO: check
+        timestamp = msg.header.stamp.sec
         img = np.ndarray(shape=(1, len(msg.data)),
                          dtype="uint8",
                          buffer=msg.data)
         img = cv2.imdecode(img, cv2.IMREAD_ANYCOLOR) * rescale_depth / 255.0
-        return img
+        return img, timestamp
 
 
 @hydra.main(version_base=None,
