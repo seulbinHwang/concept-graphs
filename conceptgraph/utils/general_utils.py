@@ -165,7 +165,7 @@ def annotate_for_vlm(
         image: np.ndarray,
         detections: sv.Detections,
         obj_classes,
-        labels: list[str],
+        labels: List[str],
         save_path=None,
         color: tuple = (0, 255, 0),
         thickness: int = 2,
@@ -292,8 +292,8 @@ def plot_edges_from_vlm(image: np.ndarray,
                         edges,
                         detections: sv.Detections,
                         obj_classes,
-                        labels: list[str],
-                        sorted_indices: list[int],
+                        labels: List[str],
+                        sorted_indices: List[int],
                         save_path=None) -> np.ndarray:
     annotated_image = image.copy()
 
@@ -348,7 +348,7 @@ def filter_detections(
     keep_larger:
     bool = True,  # Keep the larger bounding box by area if True, else keep the smaller
     min_mask_size_ratio=0.00025
-) -> tuple[sv.Detections, list[str]]:
+) -> tuple[sv.Detections, List[str]]:
     """
     
     Args:
@@ -364,7 +364,7 @@ def filter_detections(
         min_mask_size_ratio: 0.00025 
 
     Returns:
-        tuple[sv.Detections, list[str]]: filtered_detections, filtered_labels
+        tuple[sv.Detections, List[str]]: filtered_detections, filtered_labels
 이 함수는 객체 탐지 후 필터링
 
 ### 입력 데이터 처리:
@@ -527,7 +527,7 @@ def make_vlm_edges_and_captions(image,
 
     Args:
         image (numpy.ndarray): The image on which detections are performed.
-        curr_det (list): Current detections from the detection model.
+        curr_det (List): Current detections from the detection model.
         obj_classes (list): Object classes used in detection.
         detection_class_labels (list): Labels for each detection class.
         det_exp_vis_path (str): Directory path for saving visualizations.
