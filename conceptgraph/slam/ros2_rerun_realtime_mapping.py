@@ -460,10 +460,6 @@ class RealtimeHumanSegmenterNode(Node):
                 rgb_array_, curr_det, self.clip_model,
                 self.clip_preprocess, self.clip_tokenizer,
                 self.obj_classes.get_classes_arr(), self.cfg.device)
-            det_exp_path_cropped = self.det_exp_path / "cropped_images"
-            self.save_cropped_images(image_crops, det_exp_path_cropped, self.frame_idx)
-            if len(image_crops) > 1:
-                raise NotImplementedError
             ##### 2. [끝] CLIP feature를 계산
 
             # increment total object detections
@@ -491,8 +487,7 @@ class RealtimeHumanSegmenterNode(Node):
                 "captions": captions,  # len = 0
             }
             raw_grounded_obs = results
-            if not RUN_MIDDLE:
-                return
+
             # save the detections if needed
             # important
             if self.cfg.save_detections:
@@ -529,8 +524,8 @@ class RealtimeHumanSegmenterNode(Node):
                     depth_image_rgb)
                 save_detection_results(
                     self.det_exp_pkl_path / vis_save_path.stem, results)
-            else:
-                raise NotImplementedError
+            if not RUN_MIDDLE:
+                return
         ########
 
         # self.orr = Optional re-run
