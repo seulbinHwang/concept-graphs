@@ -217,7 +217,7 @@ class RealtimeHumanSegmenterNode(Node):
 
     @staticmethod
     def save_cropped_images(image_crops: List[Image.Image],
-                            folder_path: str) -> None:
+                            folder_path: str, frame_idx) -> None:
         # 폴더가 존재하지 않으면 생성
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
@@ -225,7 +225,7 @@ class RealtimeHumanSegmenterNode(Node):
         # 각각의 이미지들을 폴더에 저장
         for i, cropped_image in enumerate(image_crops):
             # 이미지 파일 이름을 생성 (예: crop_0.png, crop_1.png ...)
-            image_path = os.path.join(folder_path, f"crop_{i}.png")
+            image_path = os.path.join(folder_path, f"[{frame_idx}]crop_{i}.png")
 
             # 이미지 저장
             cropped_image.save(image_path)
@@ -461,7 +461,7 @@ class RealtimeHumanSegmenterNode(Node):
                 self.clip_preprocess, self.clip_tokenizer,
                 self.obj_classes.get_classes_arr(), self.cfg.device)
             det_exp_path_cropped = self.det_exp_path / "cropped_images"
-            self.save_cropped_images(image_crops, det_exp_path_cropped)
+            self.save_cropped_images(image_crops, det_exp_path_cropped, self.frame_idx)
             if len(image_crops) > 1:
                 raise NotImplementedError
             ##### 2. [끝] CLIP feature를 계산
