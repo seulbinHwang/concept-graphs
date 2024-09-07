@@ -455,8 +455,9 @@ class RealtimeHumanSegmenterNode(Node):
             ##### 2. [시작] CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
             # TODO: check "rgb_array" 가 맞는지
+            rgb_array_ = cv2.cvtColor(rgb_array, cv2.COLOR_BGR2RGB)
             image_crops, image_feats, text_feats = compute_clip_features_batched(
-                rgb_array, curr_det, self.clip_model,
+                rgb_array_, curr_det, self.clip_model,
                 self.clip_preprocess, self.clip_tokenizer,
                 self.obj_classes.get_classes_arr(), self.cfg.device)
             det_exp_path_cropped = self.det_exp_path / "cropped_images"

@@ -10,6 +10,23 @@ import numpy as np
 import supervision as sv
 import time
 from tqdm import trange, tqdm
+import open_clip
+from conceptgraph.utils.model_utils import compute_clip_features_batched
+
+
+def save_cropped_images(image_crops,
+                        folder_path: str) -> None:
+    # 폴더가 존재하지 않으면 생성
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+    # 각각의 이미지들을 폴더에 저장
+    for i, cropped_image in enumerate(image_crops):
+        # 이미지 파일 이름을 생성 (예: crop_0.png, crop_1.png ...)
+        image_path = os.path.join(folder_path, f"crop_{i}.png")
+
+        # 이미지 저장
+        cropped_image.save(image_path)
 
 def get_sorted_image_paths(folder_path: str) -> List[str]:
     """
@@ -52,6 +69,11 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     sam_predictor = SAM('sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
+
+    clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
+        "ViT-H-14", "laion2b_s32b_b79k")
+    clip_model = clip_model.to("cpu")
+    clip_tokenizer = open_clip.get_tokenizer("ViT-H-14")
 
     folder_path = 'frames_resized'  # Replace with the folder containing image files
     sorted_paths = get_sorted_image_paths(folder_path)
@@ -98,6 +120,14 @@ if __name__ == "__main__":
             # annotated_image, labels = vis_result_fast(
             #     image, curr_det, obj_classes.get_classes_arr(), draw_bbox=True)
             # cv2.imwrite(str(vis_save_path), annotated_image)
+            image = cv2.imread(str(color_path))  # This will in BGR color space
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # (H, W, 3)
+
+            image_crops, image_feats, text_feats = compute_clip_features_batched(
+                image_rgb, curr_det, clip_model, clip_preprocess,
+                clip_tokenizer, obj_classes.get_classes_arr(), "cpu")
+            save_cropped_images(image_crops, "test")
+            raise ValueError("Stop here")
     except:
         pass
     finally:
