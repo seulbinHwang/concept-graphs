@@ -552,7 +552,7 @@ class RealtimeHumanSegmenterNode(Node):
                                                  self.frame_idx)
 
         orr_log_rgb_image(color_path)
-        orr_log_annotated_image(color_path, self.det_exp_vis_path)
+        # orr_log_annotated_image(color_path, self.det_exp_vis_path)
         depth_tensor = torch.tensor(depth_array)  # check
         orr_log_depth_image(depth_tensor)  # resized
         orr_log_vlm_image(vis_save_path_for_vlm)
