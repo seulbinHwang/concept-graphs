@@ -403,7 +403,6 @@ class RealtimeHumanSegmenterNode(Node):
             ##### 논문과 다르게, 현 이미지 1장에 대한 edge와 node caption 정보를 구한다.
             # image: np.zeros (H, W, 3)
             # TODO: check
-            image = np.zeros_like(rgb_array)
             # self.obj_classes: ObjectClasses
             # detection_class_labels = [ "sofa chair 0", ... ]
             # det_exp_vis_path: Datasets/Replica/room0/exps/s_detections_stride10/vis
@@ -421,7 +420,7 @@ class RealtimeHumanSegmenterNode(Node):
 
             """
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
-                image, curr_det, self.obj_classes, detection_class_labels,
+                rgb_array, curr_det, self.obj_classes, detection_class_labels,
                 self.det_exp_vis_path, color_path, self.cfg.make_edges,
                 self.openai_client, self.frame_idx)
             # del edge_image
