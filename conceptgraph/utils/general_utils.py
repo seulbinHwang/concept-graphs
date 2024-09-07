@@ -553,11 +553,12 @@ def make_vlm_edges_and_captions(image,
   - bg_classes 클래스 제거
     """
     # labels: detection_class_labels가 필터링된 것: ["sofa chair 0", ...]
-    if curr_det.xyxy.size == 0:
+    if curr_det.xyxy.shape[0] == 0:
         filtered_detections = curr_det
         labels = detection_class_labels
         detection_exists = False
     else:
+        print("curr_det.xyxy.shape:", curr_det.xyxy.shape)
         detection_exists = True
         filtered_detections, labels = filter_detections(
             image=image,  #
