@@ -192,7 +192,7 @@ class RealtimeHumanSegmenterNode(Node):
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
         self._frame_idx = 0
-        self._camera_pose = self._set_extrinsic()
+        self.extrinsic = self._set_extrinsic()
         # bbox_2d_topic = \
         #     f"realsense{self.args.realsense_idx}/bounding_boxes_2d"
         # self.bounding_boxes_pub = self.create_publisher(BoundingBox2DArray,
@@ -275,9 +275,11 @@ class RealtimeHumanSegmenterNode(Node):
             raise ValueError("Invalid realsense_idx")
         translation_matrix = tf_transformations.translation_matrix(
             camera_translation)
-        (camera_pose) = translation_matrix @ rotation_matrix @ np.linalg.inv(
+        # IMPORTANT !!! world_coord = camera_pose_wrt_agent @ camera_coord
+        (camera_pose_wrt_agent) = translation_matrix @ rotation_matrix @ np.linalg.inv(
             axis_transpose_matrix)
-        return camera_pose
+        # camera_pose_wrt_agent shape :
+        return camera_pose_wrt_agent
 
     @staticmethod
     def _transform_stamped_to_matrix(transform: TransformStamped) -> np.ndarray:
@@ -312,10 +314,12 @@ class RealtimeHumanSegmenterNode(Node):
         self.frame_idx += 1
 
         color_path = None
-        # if self.intrinsics is None:
-        #     return
+        if self.intrinsics is None:
+            return
         # TODO: 세계 좌표계 기준 카메라 위치를 담도록 수정해야함
         agent_pose = self._get_pose_data()
+        if agent_pose is None:
+            return
         rgb_array = self.rgb_callback(rgb_msg)
         depth_array = self.depth_callback(depth_msg)
         #################
@@ -919,7 +923,7 @@ agent_pose.shape: (4, 4)
             print("[pose tf listener]ConnectivityException")
         except ExtrapolationException:
             print("[pose tf listener]ExtrapolationException")
-        return
+        return None
 
     def rgb_callback(self, msg: CompressedImage) -> np.ndarray:
         # 메시지에서 이미지 데이터를 읽어서 OpenCV 이미지로 변환
