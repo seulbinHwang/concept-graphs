@@ -350,14 +350,11 @@ class RealtimeHumanSegmenterNode(Node):
         # CHECK: 내가 수정했음
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
             self.det_exp_vis_path, color_path, frame_idx=self.frame_idx)
-        print("vis_save_path_for_vlm:", vis_save_path_for_vlm)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
             self.det_exp_vis_path,
             color_path,
             frame_idx=self.frame_idx,
             w_edges=True)
-        print("vis_save_path_for_vlm_edges:", vis_save_path_for_vlm_edges)
-
         if self.run_detections:
             ##### 1. [시작] RGBD에서 instance segmentation 진행
             results = self.detection_model.predict(
