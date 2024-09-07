@@ -87,9 +87,6 @@ from tf2_ros.transform_listener import TransformListener
 from geometry_msgs.msg import TransformStamped
 import tf_transformations
 import argparse
-from experimental.human_detection.utils import segmentation_utils
-from experimental.human_detection.utils import general_utils
-from experimental.human_detection.utils import visualization_utils
 from tf2_ros import (ConnectivityException, ExtrapolationException,
                      LookupException)
 from scipy.spatial.transform import Rotation as R
