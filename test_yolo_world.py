@@ -59,7 +59,7 @@ if __name__ == "__main__":
     try:
         for frame_idx, color_path in tqdm(enumerate(sorted_paths),
                                           total=len(sorted_paths)):
-            if frame_idx > 10:
+            if frame_idx > 40:
                 break
             start_time = time.time()
             image = cv2.imread(str(color_path))  # This will in BGR color space
@@ -101,6 +101,6 @@ if __name__ == "__main__":
     except:
         pass
     finally:
-        elapsed_time_per_frame = elapsed_time / len(sorted_paths)
+        elapsed_time_per_frame = elapsed_time / (frame_idx+1)
         print(f"Elapsed time: {elapsed_time} seconds")
         print(f"Elapsed time per frame: {elapsed_time_per_frame} seconds")
