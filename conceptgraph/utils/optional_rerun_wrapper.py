@@ -8,7 +8,7 @@ import numpy as np
 
 class OptionalReRun:
     """
-`OptionalReRun` 클래스는 "Rerun"이라는 로깅 라이브러리를 선택적으로 사용하는 싱글톤 패턴 클래스
+`OptionalReRun` 클래스는 "Rerun"이라는 로깅 라이브러리를 선택적으로 사용하는  클래스
 이 클래스는 주어진 조건에 따라 Rerun을 사용해 다양한 데이터를 로깅
 만약 Rerun이 설치되어 있지 않거나,
     설정에서 Rerun 사용이 비활성화되어 있으면, 해당 기능의 호출을 무시

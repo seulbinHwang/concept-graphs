@@ -2,6 +2,20 @@ import logging
 
 
 class OptionalWandB:
+    """
+이 `OptionalWandB` 클래스는
+    Weights & Biases(wandb) 라이브러리를 선택적으로 통합하여 사용할 수 있도록 설계된 클래스
+이 클래스의 주요 목적은
+    프로젝트 코드에서 wandb 라이브러리가 설치되어 있지 않거나 wandb 사용이 필요하지 않은 경우에도 코드를 수정하지 않고 사용할 수 있게 하는 것입니다.
+wandb가 사용 불가능할 경우에도 코드 흐름을 깨지 않도록 설계되어 있습니다.
+
+wandb(Weights & Biases)는 기계 학습 및 딥러닝 프로젝트에서 모델 훈련 및 실험 관리를 위한 도구
+
+연구자나 개발자가 모델을 훈련하면서 발생하는 여러 실험의 결과를 추적, 모니터링, 시각화할 수 있도록 지원
+
+주요 목적은 실험을 효율적으로 관리하고 재현성을 높이는 것
+
+    """
     '''
     A class for optionally integrating Weights & Biases (wandb) into your projects. It's designed to 
     allow projects to function with or without wandb installed, making the logging functionality 

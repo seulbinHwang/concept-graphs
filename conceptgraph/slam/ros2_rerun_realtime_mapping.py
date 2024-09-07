@@ -78,7 +78,7 @@ import rclpy
 from rclpy.node import Node
 import message_filters
 from sensor_msgs.msg import CompressedImage, CameraInfo
-from vision_msgs.msg import BoundingBox2DArray, BoundingBox2D
+# from vision_msgs.msg import BoundingBox2DArray, BoundingBox2D
 import numpy as np
 import cv2
 from typing import Tuple, List, Dict, Any, Union, Optional
@@ -99,24 +99,22 @@ import traceback
 
 class RealtimeHumanSegmenterNode(Node):
 
-    def __init__(self, cfg: DictConfig):
+    def __init__(self, cfg: DictConfig, args: argparse.Namespace):
         super().__init__('ros2_bridge')
+        self.cfg = cfg
+        self.args = args
+
         # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
         self.tracker = MappingTracker()
+        # 만약 Rerun이 설치되어 있지 않거나, 사용하지 않는 경우, 이 변수는 None입니다.
         self.orr = OptionalReRun()
-        self.orr.set_use_rerun(cfg.use_rerun)
+        self.orr.set_use_rerun(cfg.use_rerun)  # True
         self.orr.init("realtime_mapping")
         self.orr.spawn()
 
-        self.owandb = OptionalWandB()
-        self.owandb.set_use_wandb(cfg.use_wandb)
-        self.owandb.init(
-            project="concept-graphs",
-            #    entity="concept-graphs",
-            config=cfg_to_dict(cfg),
-        )
         cfg = process_cfg(cfg)
-        self.objects = MapObjectList(device=cfg.device)
+        print("args.device:", args.device)
+        self.objects = MapObjectList(device=args.device)
         self.map_edges = MapEdgeMapping(self.objects)
 
         # output folder for this mapping experiment
@@ -126,6 +124,7 @@ class RealtimeHumanSegmenterNode(Node):
         # self.exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
         self.exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
                                              cfg.exp_suffix)
+        print("exp_out_path:", self.exp_out_path)
 
         # output folder of the detections experiment to use
         # det_exp_path: Datasets/Replica/room0/exps/s_detections_stride10
@@ -133,6 +132,7 @@ class RealtimeHumanSegmenterNode(Node):
                                              cfg.scene_id,
                                              cfg.detections_exp_suffix,
                                              make_dir=False)
+        print("det_exp_path:", self.det_exp_path)
 
         # we need to make sure to use the same classes as the ones used in the detections
         detections_exp_cfg = cfg_to_dict(cfg)
@@ -145,11 +145,12 @@ class RealtimeHumanSegmenterNode(Node):
         # if we need to do detections
         # det_exp_path:
         # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10
-        print("det_exp_path:", self.det_exp_path)
+        # check_run_detections: s_detections_stride10 폴더가 있으면 실시하지 않음
         self.run_detections = check_run_detections(cfg.force_detection,
                                                    self.det_exp_path)
-        print("run_detections:", self.run_detections)
+        # det_exp_pkl_path: exps/s_detections_stride10/detections
         self.det_exp_pkl_path = get_det_out_path(self.det_exp_path)
+        # det_exp_vis_path: exps/s_detections_stride10/vis
         self.det_exp_vis_path = get_vis_out_path(self.det_exp_path)
 
         self.prev_adjusted_pose = None
@@ -162,9 +163,9 @@ class RealtimeHumanSegmenterNode(Node):
             self.detection_model = measure_time(YOLO)('yolov8l-world.pt')
             self.sam_predictor = SAM(
                 'sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
-            # self.sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
-            self.clip_model, _, self.clip_preprocess = open_clip.create_model_and_transforms(
-                "ViT-H-14", "laion2b_s32b_b79k")
+            (self.clip_model, _,
+             self.clip_preprocess) = open_clip.create_model_and_transforms(
+                 "ViT-H-14", "laion2b_s32b_b79k")
             self.clip_model = self.clip_model.to(cfg.device)
             self.clip_tokenizer = open_clip.get_tokenizer("ViT-H-14")
 
@@ -184,22 +185,23 @@ class RealtimeHumanSegmenterNode(Node):
                           is_detection_config=True)
 
         if cfg.save_objects_all_frames:
-            self.obj_all_frames_out_path = self.exp_out_path / "saved_obj_all_frames" / f"det_{cfg.detections_exp_suffix}"
+            # exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
+            self.obj_all_frames_out_path = (self.exp_out_path /
+                                            "saved_obj_all_frames" /
+                                            f"det_{cfg.detections_exp_suffix}")
             os.makedirs(self.obj_all_frames_out_path, exist_ok=True)
 
-        self.exit_early_flag = False
         self.counter = 0
         ###################################
         self.frame_idx = 0
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
         self._frame_idx = 0
-        self.cfg = cfg
         self._camera_pose = self._set_extrinsic()
-        bbox_2d_topic = \
-            f"realsense{self.args.realsense_idx}/bounding_boxes_2d"
-        self.bounding_boxes_pub = self.create_publisher(BoundingBox2DArray,
-                                                        bbox_2d_topic, 10)
+        # bbox_2d_topic = \
+        #     f"realsense{self.args.realsense_idx}/bounding_boxes_2d"
+        # self.bounding_boxes_pub = self.create_publisher(BoundingBox2DArray,
+        #                                                 bbox_2d_topic, 10)
 
         self._set_rgbd_info_subscribers()
         self._target_frame = f"realsense{self.args.realsense_idx}"
@@ -221,7 +223,7 @@ class RealtimeHumanSegmenterNode(Node):
     def _set_rgbd_info_subscribers(self):
         color_camera_info_topic_name = \
             f"realsense{self.args.realsense_idx}/color_camera_info"
-        self.rgb_camera_matrix = self.rgb_dist_coeffs = None
+        self.rgb_intrinsics = self.rgb_dist_coeffs = None
         self.color_camera_info_sub = self.create_subscription(
             CameraInfo, color_camera_info_topic_name,
             self.color_camera_info_callback, 10)
@@ -292,6 +294,7 @@ class RealtimeHumanSegmenterNode(Node):
 
     def sync_callback(self, rgb_msg: CompressedImage,
                       depth_msg: CompressedImage):
+        return
         color_path = None
         if self.intrinsics is None:
             return
@@ -323,14 +326,15 @@ class RealtimeHumanSegmenterNode(Node):
         # CHECK: 내가 수정했음
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
             self.det_exp_vis_path, color_path, self.frame_idx)
+        print("vis_save_path_for_vlm:", vis_save_path_for_vlm)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
             self.det_exp_vis_path, color_path, self.frame_idx, w_edges=True)
+        print("vis_save_path_for_vlm_edges:", vis_save_path_for_vlm_edges)
 
         if self.run_detections:
             ##### 1. [시작] RGBD에서 instance segmentation 진행
-            results = self.detection_model.predict(rgb_array,
-                                                   conf=self.cfg.mask_conf_threshold,
-                                                   verbose=False)
+            results = self.detection_model.predict(
+                rgb_array, conf=self.cfg.mask_conf_threshold, verbose=False)
             confidences = results[0].boxes.conf.cpu().numpy()
             detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
                 int)  # (N,)
@@ -570,9 +574,9 @@ class RealtimeHumanSegmenterNode(Node):
             skip_bg=self.cfg.skip_bg,
             # ["wall", "floor", "ceiling"]
             BG_CLASSES=self.obj_classes.get_bg_classes_arr(),
-            mask_area_threshold=self.cfg.mask_area_threshold, # 25
-            max_bbox_area_ratio=self.cfg.max_bbox_area_ratio, # 0.5
-            mask_conf_threshold=None, #self.cfg.mask_conf_threshold, # 0.25
+            mask_area_threshold=self.cfg.mask_area_threshold,  # 25
+            max_bbox_area_ratio=self.cfg.max_bbox_area_ratio,  # 0.5
+            mask_conf_threshold=None,  #self.cfg.mask_conf_threshold, # 0.25
         )
         ##### 1.1. [끝] segmentation 결과 필터링
 
@@ -586,8 +590,6 @@ class RealtimeHumanSegmenterNode(Node):
                                                        grounded_obs['mask'])
         if not RUN_AFTER:
             return
-
-
         """
 -----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------
 depth_array.shape: (680, 1200)
@@ -675,10 +677,6 @@ agent_pose.shape: (4, 4)
         if len(self.objects) == 0:
             self.objects.extend(detection_list)
             self.tracker.increment_total_objects(len(detection_list))
-            self.owandb.log({
-                "total_objects_so_far": self.tracker.get_total_objects(),
-                "objects_this_frame": len(detection_list),
-            })
             return
 
         ### compute similarities and then merge
@@ -824,25 +822,8 @@ agent_pose.shape: (4, 4)
                             latest_pcd_filepath=self.cfg.latest_pcd_filepath,
                             create_symlink=True)
 
-        self.owandb.log({
-            "frame_idx": self.frame_idx,
-            "counter": self.counter,
-            "exit_early_flag": self.exit_early_flag,
-            "is_final_frame": False,
-        })
-
         self.tracker.increment_total_objects(len(self.objects))
         self.tracker.increment_total_detections(len(detection_list))
-        self.owandb.log({
-            "total_objects": self.tracker.get_total_objects(),
-            "objects_this_frame": len(self.objects),
-            "total_detections": self.tracker.get_total_detections(),
-            "detections_this_frame": len(detection_list),
-            "frame_idx": self.frame_idx,
-            "counter": self.counter,
-            "exit_early_flag": self.exit_early_flag,
-            "is_final_frame": False,
-        })
         self.frame_idx += 1
         #################
 
@@ -904,8 +885,6 @@ agent_pose.shape: (4, 4)
         if self.run_detections:
             if self.cfg.save_video:
                 save_video_detections(self.det_exp_path)
-
-        self.owandb.finish()
 
     def _save_objects_result(
             self, objects_info: List[Optional[segmentation_utils.ObjectInfo]]
@@ -994,13 +973,13 @@ agent_pose.shape: (4, 4)
         dist_coeffs = np.array(msg.d)  # (5,)
         camera_matrix = np.array(msg.k).reshape(3, 3)
         """
-self.rgb_camera_matrix: [[     301.56           0      214.37]
+self.rgb_intrinsics: [[     301.56           0      214.37]
  [          0       300.9      121.26]
  [          0           0           1]]
 self.rgb_dist_coeffs: [          0           0           0           0           0]
 
         """
-        self.rgb_camera_matrix = camera_matrix
+        self.rgb_intrinsics = camera_matrix
         self.rgb_dist_coeffs = dist_coeffs
         return camera_matrix, dist_coeffs
 
@@ -1038,26 +1017,7 @@ self.depth_dist_coeffs: [          0           0           0           0        
             config_path="../hydra_configs/",
             config_name="rerun_realtime_mapping")
 def main(cfg: DictConfig):
-    # ROS2 초기화
-    rclpy.init()
-    ros2_bridge = None
-    try:
-        ros2_bridge = RealtimeHumanSegmenterNode(cfg)
-        rclpy.spin(ros2_bridge)
-    except:
-        traceback.print_exc()
-        if ros2_bridge is not None:
-            ros2_bridge.wrap_up()
-            visualization_utils.merge_images(ros2_bridge._mask_images_dir,
-                                             ros2_bridge._results_3d_dir,
-                                             ros2_bridge._results_2d_dir)
-            ros2_bridge.vis.destroy_window()
-            ros2_bridge.destroy_node()
-            rclpy.shutdown()
-            visualization_utils.create_gif_from_images()
 
-
-if __name__ == "__main__":
     # TODO: yaml로 옮겨야 함
     parser = argparse.ArgumentParser(
         description="RealtimeHumanSegmenterNode Node")
@@ -1091,4 +1051,26 @@ if __name__ == "__main__":
                         default='cpu',
                         help="Device to use for computation (cpu or cuda)")
     args = parser.parse_args()
+
+    # ROS2 초기화
+    rclpy.init()
+    ros2_bridge = None
+    try:
+        ros2_bridge = RealtimeHumanSegmenterNode(cfg, args)
+        rclpy.spin(ros2_bridge)
+    except:
+        traceback.print_exc()
+        if ros2_bridge is not None:
+            ros2_bridge.wrap_up()
+            visualization_utils.merge_images(ros2_bridge._mask_images_dir,
+                                             ros2_bridge._results_3d_dir,
+                                             ros2_bridge._results_2d_dir)
+            ros2_bridge.vis.destroy_window()
+            ros2_bridge.destroy_node()
+            rclpy.shutdown()
+            visualization_utils.create_gif_from_images()
+
+
+if __name__ == "__main__":
+
     main()
