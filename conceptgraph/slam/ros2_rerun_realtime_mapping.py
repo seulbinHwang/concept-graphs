@@ -434,9 +434,7 @@ class RealtimeHumanSegmenterNode(Node):
     - vis_save_path_for_vlm
 
             """
-            if curr_det.xyxy.shape[0] == 0:
-                print("No detections found in the image")
-                return
+
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
                 rgb_array, curr_det, self.obj_classes, detection_class_labels,
                 self.det_exp_vis_path, color_path, self.cfg.make_edges,
@@ -451,6 +449,9 @@ class RealtimeHumanSegmenterNode(Node):
         text_feats: List
             - 빈 리스트
             """
+            if curr_det.xyxy.shape[0] == 0:
+                print("No detections found in the image")
+                return
             ##### 2. [시작] CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
             # TODO: check "rgb_array" 가 맞는지
