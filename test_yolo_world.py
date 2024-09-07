@@ -39,6 +39,7 @@ def get_sorted_image_paths(folder_path: str) -> List[str]:
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = "cpu"
     classes_file = "./conceptgraph/scannet200_classes.txt"
     obj_classes = ObjectClasses(
         classes_file_path=classes_file,
