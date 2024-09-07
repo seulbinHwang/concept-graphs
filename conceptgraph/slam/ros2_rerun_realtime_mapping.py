@@ -464,6 +464,7 @@ class RealtimeHumanSegmenterNode(Node):
             """
             if curr_det.xyxy.shape[0] == 0:
                 print("No detections found in the image")
+                self.prev_adjusted_pose = camera_pose
                 return
             ##### 2. [시작] CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
