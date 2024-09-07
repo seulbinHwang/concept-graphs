@@ -348,7 +348,7 @@ def filter_detections(
     keep_larger:
     bool = True,  # Keep the larger bounding box by area if True, else keep the smaller
     min_mask_size_ratio=0.00025
-) -> tuple[sv.Detections, List[str]]:
+) -> Tuple[sv.Detections, List[str]]:
     """
     
     Args:
@@ -364,7 +364,7 @@ def filter_detections(
         min_mask_size_ratio: 0.00025 
 
     Returns:
-        tuple[sv.Detections, List[str]]: filtered_detections, filtered_labels
+        Tuple[sv.Detections, List[str]]: filtered_detections, filtered_labels
 이 함수는 객체 탐지 후 필터링
 
 ### 입력 데이터 처리:

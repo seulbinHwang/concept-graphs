@@ -230,7 +230,7 @@ def get_sam_predictor(variant: str, device: str | int) -> SamPredictor:
 # The SAM based on automatic mask generation, without bbox prompting
 def get_sam_segmentation_dense(
         variant: str, model: Any,
-        image: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        image: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
     The SAM based on automatic mask generation, without bbox prompting
     
