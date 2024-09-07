@@ -289,10 +289,9 @@ class RealtimeHumanSegmenterNode(Node):
 
     def sync_callback(self, rgb_msg: CompressedImage,
                       depth_msg: CompressedImage):
-        return
         color_path = None
-        if self.intrinsics is None:
-            return
+        # if self.intrinsics is None:
+        #     return
         # TODO: 세계 좌표계 기준 카메라 위치를 담도록 수정해야함
         agent_pose = self._get_pose_data()
         rgb_array = self.rgb_callback(rgb_msg)
