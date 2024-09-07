@@ -421,10 +421,6 @@ def filter_detections(
     filtered_detections = []
     for idx, current_det in enumerate(detections_combined):
         _, curr_class_id, curr_xyxy, curr_mask, _ = current_det
-        curr_center = ((curr_xyxy[0] + curr_xyxy[2]) / 2,
-                       (curr_xyxy[1] + curr_xyxy[3]) / 2)
-        curr_area = (curr_xyxy[2] - curr_xyxy[0]) * (curr_xyxy[3] -
-                                                     curr_xyxy[1])
         keep = True
 
         # Calculate the total number of pixels as a threshold for small masks
@@ -446,35 +442,11 @@ def filter_detections(
                 # 크기가 거의 똑같은 물체 -> 다른 class일 리 없다.
                 filtered_detections.remove(other)
                 continue
-                # keep = False
-                # print(
-                #     f"Removing {classes.get_classes_arr()[curr_class_id]} because it has an IoU of {mask_iou(curr_mask, other_mask)} with object {classes.get_classes_arr()[other_class_id]}."
-                # )
-                # break
-
-            # other_center = ((other_xyxy[0] + other_xyxy[2]) / 2,
-            #                 (other_xyxy[1] + other_xyxy[3]) / 2)
-            # other_area = (other_xyxy[2] - other_xyxy[0]) * (other_xyxy[3] -
-            #                                                 other_xyxy[1])
-
-            # # Calculate distance between centers
-            # dist = np.sqrt((curr_center[0] - other_center[0])**2 +
-            #                (curr_center[1] - other_center[1])**2)
-            # if dist < proximity_threshold:
-            #     if (keep_larger and
-            #             curr_area > other_area) or (not keep_larger and
-            #                                         curr_area < other_area):
-            #         filtered_detections.remove(other)
-            #         continue
-            #     else:
-            #         keep = False
-            #         break
-        # print(given_labels[idx])
         if classes.get_classes_arr()[curr_class_id] in classes.bg_classes:
             print(
                 f"Removing {classes.get_classes_arr()[curr_class_id]} because it is a background class, specifically {classes.bg_classes}."
             )
-            keep = False
+            keep = True #False
 
         if keep:
             filtered_detections.append(current_det)
@@ -568,7 +540,6 @@ def make_vlm_edges_and_captions(image,
             confidence_threshold=0.00001,
             given_labels=detection_class_labels,
         )
-
     edges = []
     captions = []
     edge_image = None
