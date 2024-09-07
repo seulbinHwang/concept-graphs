@@ -91,9 +91,9 @@ if __name__ == "__main__":
         vis_save_path = os.path.join(save_dir, f"{frame_idx}.jpg")
         a_elapsed_time = time.time() - start_time
         elapsed_time += a_elapsed_time
-        annotated_image, labels = vis_result_fast(
-            image, curr_det, obj_classes.get_classes_arr(), draw_bbox=True)
-        cv2.imwrite(str(vis_save_path), annotated_image)
+        # annotated_image, labels = vis_result_fast(
+        #     image, curr_det, obj_classes.get_classes_arr(), draw_bbox=True)
+        # cv2.imwrite(str(vis_save_path), annotated_image)
 
     elapsed_time_per_frame = elapsed_time / len(sorted_paths)
     print(f"Elapsed time: {elapsed_time} seconds")
