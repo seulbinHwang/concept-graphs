@@ -321,8 +321,8 @@ class RealtimeHumanSegmenterNode(Node):
             return
 
         rgb_array = self.rgb_callback(rgb_msg)
-        depth_array, depth_rclpy_time = self.depth_callback(depth_msg)
-        agent_pose = self._get_pose_data(depth_rclpy_time)
+        depth_array, depth_builtin_time = self.depth_callback(depth_msg)
+        agent_pose = self._get_pose_data(depth_builtin_time)
         if agent_pose is None:
             return
         camera_pose = agent_pose @ self._camera_to_agent
@@ -911,7 +911,7 @@ camera_pose.shape: (4, 4)
             if self.cfg.save_video:
                 save_video_detections(self.det_exp_path)
 
-    def _get_pose_data(self, time_msg: rclpy.time.Time) -> Optional[np.ndarray]:
+    def _get_pose_data(self, time_msg: Time) -> Optional[np.ndarray]:
         try:
             vl_transform = self._tf_buffer.lookup_transform(
                 target_frame=self._target_frame,
@@ -976,18 +976,16 @@ self.depth_dist_coeffs: [          0           0           0           0        
     def depth_callback(
             self,
             msg: CompressedImage,
-            rescale_depth: float = 4.) -> Tuple[np.ndarray, rclpy.time.Time]:
+            rescale_depth: float = 4.) -> Tuple[np.ndarray, Time]:
         # np_array = np.frombuffer(msg.data, np.uint8)
         # depth_array = cv2.imdecode(np_array, cv2.IMREAD_ANYDEPTH)
         # TODO: check
         builtin_time = msg.header.stamp
-        rclpy_time = rclpy.time.Time(seconds=builtin_time.sec,
-                                     nanoseconds=builtin_time.nanosec)
         img = np.ndarray(shape=(1, len(msg.data)),
                          dtype="uint8",
                          buffer=msg.data)
         img = cv2.imdecode(img, cv2.IMREAD_ANYCOLOR) * rescale_depth / 255.0
-        return img, rclpy_time
+        return img, builtin_time
 
 
 @hydra.main(version_base=None,
