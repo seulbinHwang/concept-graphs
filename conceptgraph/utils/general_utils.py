@@ -416,7 +416,7 @@ def filter_detections(
 
     if top_x_detections is not None:
         detections_combined = detections_combined[:top_x_detections]
-
+    print("[before] len(detections_combined):", len(detections_combined))
     # Further filter based on proximity
     filtered_detections = []
     for idx, current_det in enumerate(detections_combined):
@@ -478,7 +478,7 @@ def filter_detections(
 
         if keep:
             filtered_detections.append(current_det)
-
+    print("[after] len(filtered_detections):", len(filtered_detections))
     # Unzip the filtered results
     confidences, class_ids, xyxy, masks, indices = zip(*filtered_detections)
     filtered_labels = [given_labels[i] for i in indices]
