@@ -211,6 +211,11 @@ class RealtimeHumanSegmenterNode(Node):
             f"realsense{self.args.realsense_idx}/depth"
         depth_sub = message_filters.Subscriber(self, CompressedImage,
                                                depth_sub_topic_name)
+        """
+        TODO: 큰 문제
+        - rgb_sub와 depth_sub의 차이 허용을 0.1초로 하니, depth가 많이 어긋난다.
+        - 부탁드려서, rgb 보내는 것과 depth 보내는 것의 timestamp를 동일하게 해달라고 부탁 
+        """
         self.ts = message_filters.ApproximateTimeSynchronizer(
             [rgb_sub, depth_sub], queue_size=10, slop=0.1)
         self.ts.registerCallback(self.sync_callback)
@@ -524,16 +529,17 @@ class RealtimeHumanSegmenterNode(Node):
                     depth_image_rgb)
                 save_detection_results(
                     self.det_exp_pkl_path / vis_save_path.stem, results)
-            if not RUN_MIDDLE:
-                return
+
         ########
 
         # self.orr = Optional re-run
+        if not RUN_MIDDLE:
+            return
+
         """
 카메라의 내재적(intrinsic) 및 외재적(extrinsic) 파라미터를 로깅하는 역할
 특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
     "이전 프레임의 카메라 위치"와 "현재 프레임의 카메라 위치"를 연결하는 경로를 시각적으로 나타냄
-
         """
         self.prev_adjusted_pose = orr_log_camera(self.intrinsics, agent_pose,
                                                  self.prev_adjusted_pose,
@@ -568,7 +574,8 @@ class RealtimeHumanSegmenterNode(Node):
         image_rgb: (H, W, 3)
         """
         # CHECK: 아마 현재는 resize 가 필요 없어 보입니다.
-        resized_grounded_obs = resize_gobs(raw_grounded_obs, rgb_array)
+        # resized_grounded_obs = resize_gobs(raw_grounded_obs, rgb_array)
+        resized_grounded_obs = raw_grounded_obs
         ##### 1.1. [시작] segmentation 결과 필터링
         """
 2. **필터링 기준 설정**:
