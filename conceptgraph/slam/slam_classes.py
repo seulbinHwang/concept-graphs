@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, List
 
 import copy
 import matplotlib
@@ -136,7 +136,7 @@ class DetectionList(list):
                 new_self.append(self[i])
         return new_self
 
-    def get_most_common_class(self) -> list[int]:
+    def get_most_common_class(self) -> List[int]:
         classes = []
         for d in self:
             values, counts = np.unique(np.asarray(d['class_id']),
