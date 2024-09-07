@@ -217,7 +217,7 @@ class RealtimeHumanSegmenterNode(Node):
         - 부탁드려서, rgb 보내는 것과 depth 보내는 것의 timestamp를 동일하게 해달라고 부탁 
         """
         self.ts = message_filters.ApproximateTimeSynchronizer(
-            [rgb_sub, depth_sub], queue_size=10, slop=0.1)
+            [rgb_sub, depth_sub], queue_size=10, slop=0.05)
         self.ts.registerCallback(self.sync_callback)
 
     @staticmethod
@@ -531,10 +531,6 @@ class RealtimeHumanSegmenterNode(Node):
                     self.det_exp_pkl_path / vis_save_path.stem, results)
 
         ########
-
-        # self.orr = Optional re-run
-        if not RUN_MIDDLE:
-            return
 
         """
 카메라의 내재적(intrinsic) 및 외재적(extrinsic) 파라미터를 로깅하는 역할
