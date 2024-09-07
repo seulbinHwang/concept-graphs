@@ -980,7 +980,7 @@ self.depth_dist_coeffs: [          0           0           0           0        
         # np_array = np.frombuffer(msg.data, np.uint8)
         # depth_array = cv2.imdecode(np_array, cv2.IMREAD_ANYDEPTH)
         # TODO: check
-        builtin_time = msg.header.stamp.sec
+        builtin_time = msg.header.stamp
         rclpy_time = rclpy.time.Time(seconds=builtin_time.sec,
                                      nanoseconds=builtin_time.nanosec)
         img = np.ndarray(shape=(1, len(msg.data)),
