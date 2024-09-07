@@ -70,6 +70,9 @@ python -m conceptgraph.slam.rerun_realtime_mapping
 # Disable torch gradient computation
 torch.set_grad_enabled(False)
 RUN_OPEN_API = False
+RUN_START = False
+RUN_MIDDLE = False
+RUN_AFTER = False
 
 import rclpy
 from rclpy.node import Node
@@ -98,6 +101,7 @@ class RealtimeHumanSegmenterNode(Node):
 
     def __init__(self, cfg: DictConfig):
         super().__init__('ros2_bridge')
+        # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
         self.tracker = MappingTracker()
         self.orr = OptionalReRun()
         self.orr.set_use_rerun(cfg.use_rerun)
@@ -132,6 +136,7 @@ class RealtimeHumanSegmenterNode(Node):
 
         # we need to make sure to use the same classes as the ones used in the detections
         detections_exp_cfg = cfg_to_dict(cfg)
+        # obj_classes 에서 person 제외했음
         self.obj_classes = ObjectClasses(
             classes_file_path=detections_exp_cfg['classes_file'],
             bg_classes=detections_exp_cfg['bg_classes'],
@@ -324,7 +329,7 @@ class RealtimeHumanSegmenterNode(Node):
         if self.run_detections:
             ##### 1. [시작] RGBD에서 instance segmentation 진행
             results = self.detection_model.predict(rgb_array,
-                                                   conf=0.1,
+                                                   conf=self.cfg.mask_conf_threshold,
                                                    verbose=False)
             confidences = results[0].boxes.conf.cpu().numpy()
             detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
@@ -334,6 +339,7 @@ class RealtimeHumanSegmenterNode(Node):
                 f"{self.obj_classes.get_classes_arr()[class_id]} {class_idx}"
                 for class_idx, class_id in enumerate(detection_class_ids)
             ]
+            # 원본 size 기준으로 xyxy 가 나온다는 것을 확인함
             xyxy_tensor = results[0].boxes.xyxy
             xyxy_np = xyxy_tensor.cpu().numpy()
 
@@ -355,6 +361,7 @@ class RealtimeHumanSegmenterNode(Node):
                 masks_np = np.empty((0, *color_tensor.shape[:2]),
                                     dtype=np.float64)
             # Create a detections object that we will save later.
+            # TODO: check -> xyxy_np.copy()
             curr_det = sv.Detections(
                 xyxy=xyxy_np,
                 confidence=confidences,
@@ -397,6 +404,22 @@ class RealtimeHumanSegmenterNode(Node):
             # image: np.zeros (H, W, 3)
             # TODO: check
             image = np.zeros_like(rgb_array)
+            # self.obj_classes: ObjectClasses
+            # detection_class_labels = [ "sofa chair 0", ... ]
+            # det_exp_vis_path: Datasets/Replica/room0/exps/s_detections_stride10/vis
+            # color_path: None
+            #
+
+            # labels: detection_class_labels 가 필터링된 것: ["sofa chair 0", ...]
+            # edges = [] / edge_image = None / captions = []
+            """ make_vlm_edges_and_captions
+  - IoU가 80% 이상 겹치면, 신뢰도가 낮은 객체를 제거
+  - bg_classes 클래스 제거
+  
+  - 위 결과를 저장
+    - vis_save_path_for_vlm
+
+            """
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
                 image, curr_det, self.obj_classes, detection_class_labels,
                 self.det_exp_vis_path, color_path, self.cfg.make_edges,
@@ -405,7 +428,7 @@ class RealtimeHumanSegmenterNode(Node):
             ##### 5. [끝] VLM을 통해 edge와 caption 정보를 구한다.
             """
         image_crops: List[Image.Image]
-            - 잘라낸 이미지들의 리스트
+            - 잘라낸 이미지들의 리스트 (길이: N)
         image_feats: np.ndarray
             - 잘라낸 이미지들의 CLIP feature: shape (N, 512)
         text_feats: List
@@ -414,6 +437,8 @@ class RealtimeHumanSegmenterNode(Node):
             ##### 2. [시작] CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
             # TODO: check "rgb_array" 가 맞는지
+            if not RUN_MIDDLE:
+                return
             image_crops, image_feats, text_feats = compute_clip_features_batched(
                 rgb_array, curr_det, self.clip_model,
                 self.clip_preprocess, self.clip_tokenizer,
@@ -438,7 +463,9 @@ class RealtimeHumanSegmenterNode(Node):
                 "text_feats": text_feats,  # len = 0 # 아마?
                 "detection_class_labels":
                     detection_class_labels,  # len = 34, "sofa chair 0"
-                "labels": labels,  # len = 19, "sofa chair 0"
+                # len = 19, "sofa chair 0" -> detection_class_labels을 필터링한 것
+                # TODO: 이게 왜 필요하지?
+                "labels": labels,
                 "edges": edges,  # len = 0
                 "captions": captions,  # len = 0
             }
@@ -485,6 +512,12 @@ class RealtimeHumanSegmenterNode(Node):
         ########
 
         # self.orr = Optional re-run
+        """
+카메라의 내재적(intrinsic) 및 외재적(extrinsic) 파라미터를 로깅하는 역할
+특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
+    "이전 프레임의 카메라 위치"와 "현재 프레임의 카메라 위치"를 연결하는 경로를 시각적으로 나타냄
+
+        """
         self.prev_adjusted_pose = orr_log_camera(self.intrinsics, agent_pose,
                                                  self.prev_adjusted_pose,
                                                  self.cfg.image_width,
@@ -517,15 +550,16 @@ class RealtimeHumanSegmenterNode(Node):
             }
         image_rgb: (H, W, 3)
         """
+        # CHECK: 아마 현재는 resize 가 필요 없어 보입니다.
         resized_grounded_obs = resize_gobs(raw_grounded_obs, rgb_array)
         ##### 1.1. [시작] segmentation 결과 필터링
         """
 2. **필터링 기준 설정**:
-     - **마스크 면적**: 
+     - **마스크 면적**: (적용)
         - 마스크의 면적이 `mask_area_threshold`보다 작은 객체는 필터링 ( 25 )
      - **배경 클래스 필터링**: 
         - `skip_bg`가 활성화된 경우, 배경 클래스(`BG_CLASSES`)에 속하는 객체는 필터링
-     - **경계 상자 면적 비율**: 
+     - **경계 상자 면적 비율**:  (적용)
         - 경계 상자 면적이 이미지의 `max_bbox_area_ratio(0.5)`를 초과하는 객체는 필터링
      - **신뢰도 필터링**: 
         - 객체의 신뢰도가 `mask_conf_threshold`보다 낮은 경우 해당 객체는 필터링
@@ -534,10 +568,11 @@ class RealtimeHumanSegmenterNode(Node):
             resized_grounded_obs,
             rgb_array,
             skip_bg=self.cfg.skip_bg,
+            # ["wall", "floor", "ceiling"]
             BG_CLASSES=self.obj_classes.get_bg_classes_arr(),
-            mask_area_threshold=self.cfg.mask_area_threshold,
-            max_bbox_area_ratio=self.cfg.max_bbox_area_ratio,
-            mask_conf_threshold=self.cfg.mask_conf_threshold,
+            mask_area_threshold=self.cfg.mask_area_threshold, # 25
+            max_bbox_area_ratio=self.cfg.max_bbox_area_ratio, # 0.5
+            mask_conf_threshold=None, #self.cfg.mask_conf_threshold, # 0.25
         )
         ##### 1.1. [끝] segmentation 결과 필터링
 
@@ -549,6 +584,10 @@ class RealtimeHumanSegmenterNode(Node):
         # this helps make sure things like 베개 on 소파 are separate objects.
         grounded_obs['mask'] = mask_subtract_contained(grounded_obs['xyxy'],
                                                        grounded_obs['mask'])
+        if not RUN_AFTER:
+            return
+
+
         """
 -----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------
 depth_array.shape: (680, 1200)

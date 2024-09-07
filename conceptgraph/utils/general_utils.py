@@ -350,30 +350,39 @@ def filter_detections(
     min_mask_size_ratio=0.00025
 ) -> tuple[sv.Detections, list[str]]:
     """
-이 함수는 객체 탐지 후 후처리를 통해 탐지 결과를 필터링하는 로직을 구현
-주로 탐지된 객체들에 대한 신뢰도 기반 정렬, 상위 X개의 탐지 결과 유지, 
-    인접 객체 간의 겹침 또는 근접성을 평가하고, 
-    특정 조건에 따라 필터링된 탐지 결과를 반환하는 구조
+    
+    Args:
+        image: (H, W, 3)
+        detections: sv.Detections
+        classes: ObjectClasses
+        top_x_detections: 150000
+        confidence_threshold: 0.00001
+        given_labels: [ "sofa chair 0", ... ]
+        iou_threshold: 0.80
+        proximity_threshold: 20.0 
+        keep_larger: True
+        min_mask_size_ratio: 0.00025 
+
+    Returns:
+        tuple[sv.Detections, list[str]]: filtered_detections, filtered_labels
+이 함수는 객체 탐지 후 필터링
 
 ### 입력 데이터 처리:
-1. **탐지 객체 검증**: 
-    `detections` 객체가 `confidence`, `class_id`, `xyxy` 속성을 가지는지 확인
-    탐지 객체에 필요한 속성이 없다면 필터링을 중단하고 빈 리스트를 반환
 2. **탐지 결과 정렬**: 
-    `detections` 객체의 `confidence`(신뢰도), `class_id`(클래스 ID),
-     `xyxy`(바운딩 박스 좌표), `mask`(마스크 정보) 등을 결합하여 
-     `confidence` 값을 기준으로 내림차순으로 정렬
+    `detections` 객체의  `confidence` 값을 기준으로 내림차순으로 정렬
      `top_x_detections` 값이 주어지면, 상위 `X`개의 탐지 결과만 남깁니다.
 
 ### 필터링 로직:
 - **탐지 결과 간 근접성 및 겹침 필터링**:
   1. **마스크 크기 평가**: 
-    탐지된 객체의 마스크 크기를 평가하여, 
-        `min_mask_size_ratio`로 설정된 임계값보다 작은 마스크를 가진 객체는 제거
+    (탐지된 객체의 마스크 크기를 평가하여,)
+        (`min_mask_size_ratio`로 설정된 임계값보다 작은 마스크를 가진 객체는 제거)
+
   2. **IoU(Intersection over Union)**: 
     각 객체의 마스크 간 겹침 정도(IoU)를 계산하여, 
         `iou_threshold` 이상의 겹침을 가진 경우 탐지 결과를 필터링
     탐지 객체의 클래스 이름과 겹치는 객체의 클래스 이름을 출력
+
   3. **중심점 거리 계산**: 
     객체 간의 바운딩 박스 중심점 거리(proximity)를 계산하여, 
     `proximity_threshold` 이내로 가까운 객체는 제거
@@ -384,9 +393,14 @@ def filter_detections(
     탐지된 객체가 배경 클래스(`bg_classes`)에 속하는 경우 이를 필터링하여 제거
 
 ### 결과 생성:
-- 필터링된 탐지 결과에서 신뢰도, 클래스 ID, 좌표(xyxy), 마스크 정보를 추출하여 `sv.Detections` 객체를 다시 생성합니다.
-- 필터링된 탐지 객체들의 레이블 리스트도 함께 반환됩니다.
+- 필터링된 탐지 결과에서 신뢰도, 클래스 ID, 좌표(xyxy), 마스크 정보를 추출하여 `sv.Detections` 객체를 다시 생성
+- 필터링된 탐지 객체들의 레이블 리스트도 함께 반환
 
+    """
+    """
+- 남은 로직
+  - IoU가 80% 이상 겹치면, 신뢰도가 낮은 객체를 제거
+  - bg_classes 클래스 제거
     """
     if not (hasattr(detections, 'confidence') and
             hasattr(detections, 'class_id') and hasattr(detections, 'xyxy')):
@@ -429,28 +443,32 @@ def filter_detections(
             _, other_class_id, other_xyxy, other_mask, _ = other
 
             if mask_iou(curr_mask, other_mask) > iou_threshold:
-                keep = False
-                print(
-                    f"Removing {classes.get_classes_arr()[curr_class_id]} because it has an IoU of {mask_iou(curr_mask, other_mask)} with object {classes.get_classes_arr()[other_class_id]}."
-                )
-                break
+                # 크기가 거의 똑같은 물체 -> 다른 class일 리 없다.
+                filtered_detections.remove(other)
+                continue
+                # keep = False
+                # print(
+                #     f"Removing {classes.get_classes_arr()[curr_class_id]} because it has an IoU of {mask_iou(curr_mask, other_mask)} with object {classes.get_classes_arr()[other_class_id]}."
+                # )
+                # break
 
-            other_center = ((other_xyxy[0] + other_xyxy[2]) / 2,
-                            (other_xyxy[1] + other_xyxy[3]) / 2)
-            other_area = (other_xyxy[2] - other_xyxy[0]) * (other_xyxy[3] -
-                                                            other_xyxy[1])
+            # other_center = ((other_xyxy[0] + other_xyxy[2]) / 2,
+            #                 (other_xyxy[1] + other_xyxy[3]) / 2)
+            # other_area = (other_xyxy[2] - other_xyxy[0]) * (other_xyxy[3] -
+            #                                                 other_xyxy[1])
 
-            # Calculate distance between centers
-            dist = np.sqrt((curr_center[0] - other_center[0])**2 +
-                           (curr_center[1] - other_center[1])**2)
-            if dist < proximity_threshold:
-                if (keep_larger and
-                        curr_area > other_area) or (not keep_larger and
-                                                    curr_area < other_area):
-                    filtered_detections.remove(other)
-                else:
-                    keep = False
-                    break
+            # # Calculate distance between centers
+            # dist = np.sqrt((curr_center[0] - other_center[0])**2 +
+            #                (curr_center[1] - other_center[1])**2)
+            # if dist < proximity_threshold:
+            #     if (keep_larger and
+            #             curr_area > other_area) or (not keep_larger and
+            #                                         curr_area < other_area):
+            #         filtered_detections.remove(other)
+            #         continue
+            #     else:
+            #         keep = False
+            #         break
         # print(given_labels[idx])
         if classes.get_classes_arr()[curr_class_id] in classes.bg_classes:
             print(
@@ -479,7 +497,7 @@ def filter_detections(
 def get_vlm_annotated_image_path(
     det_exp_vis_path,
     color_path,
-frame_idx = None,
+    frame_idx=None,
     w_edges=False,
     suffix="annotated_for_vlm.jpg",
 ):
@@ -489,16 +507,21 @@ frame_idx = None,
     if frame_idx:
         return os.path.join(det_exp_vis_path, f"{frame_idx:06d}_{suffix}")
 
-
     # Create the file path
     vis_save_path = (det_exp_vis_path / color_path.name).with_suffix(
         ".jpg").with_name((det_exp_vis_path / color_path.name).stem + suffix)
     return str(vis_save_path)
 
 
-def make_vlm_edges_and_captions(image, curr_det, obj_classes,
-                                detection_class_labels, det_exp_vis_path,
-                                color_path, make_edges_flag, openai_client, frame_idx = None):
+def make_vlm_edges_and_captions(image,
+                                curr_det,
+                                obj_classes,
+                                detection_class_labels,
+                                det_exp_vis_path,
+                                color_path,
+                                make_edges_flag,
+                                openai_client,
+                                frame_idx=None):
     """
     Process detections by filtering, annotating, and extracting object relationships.
 
@@ -522,8 +545,16 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes,
     """
     # Filter the detections
     # labels: detection_class_labels가 필터링된 것: ["sofa chair 0", ...]
+    """
+    그림 그리고, edge 찾는데에만 필터링 결과가 사용됩니다.
+    
+- 남은 로직
+  - IoU가 80% 이상 겹치면, 신뢰도가 낮은 객체를 제거
+  - bg_classes 클래스 제거
+    """
+    # labels: detection_class_labels가 필터링된 것: ["sofa chair 0", ...]
     filtered_detections, labels = filter_detections(
-        image=image,
+        image=image,  #
         detections=curr_det,
         classes=obj_classes,
         top_x_detections=150000,
@@ -539,8 +570,13 @@ def make_vlm_edges_and_captions(image, curr_det, obj_classes,
         # Datasets/Replica/room0/exps/s_detections_stride10/vis
         # color_path
         # Datasets/Replica/room0/results/frame000000.jpg
+
+        # vis_save_path_for_vlm
+        # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm.jpg
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
             det_exp_vis_path, color_path, frame_idx)
+        # vis_save_path_for_vlm_edges
+        # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm_w_edges.jpg
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
             det_exp_vis_path, color_path, frame_idx, w_edges=True)
         """ annotate_for_vlm
