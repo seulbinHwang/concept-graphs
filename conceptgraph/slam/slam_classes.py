@@ -1,4 +1,5 @@
-from collections.abc import Iterable
+from typing import Iterable
+
 import copy
 import matplotlib
 import torch
