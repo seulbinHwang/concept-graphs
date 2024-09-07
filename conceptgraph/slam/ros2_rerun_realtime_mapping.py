@@ -682,8 +682,6 @@ camera_pose.shape: (4, 4)
         detection_list = make_detection_list_from_pcd_and_gobs(
             obj_pcds_and_bboxes, grounded_obs, color_path, self.obj_classes,
             self.frame_idx)
-        if not RUN_AFTER:
-            return
         if len(detection_list) == 0:  # no detections, skip
             return
         ##### 3. [끝] pointclouds 만들기
@@ -717,7 +715,7 @@ camera_pose.shape: (4, 4)
                                          spatial_sim=spatial_sim,
                                          visual_sim=visual_sim)
 
-        # Perform matching of detections to existing self.objects
+        # Perform matching of detections to existing self.objects .
         # match_indices: 길이는 "새 검지 개수"
         match_indices: List[Optional[int]] = match_detections_to_objects(
             agg_sim=agg_sim,
@@ -736,6 +734,9 @@ camera_pose.shape: (4, 4)
             device=self.cfg['device']
             # Note: Removed 'match_method' and 'phys_bias' as they do not appear in the provided merge function
         )
+        if not RUN_AFTER:
+            print("RUN_AFTER RUN_AFTER RUN_AFTER RUN_AFTER RUN_AFTER  is False")
+            return
         ##### 4. [끝] 기존 object 들과 융합하기
 
         # fix the class names for self.objects
