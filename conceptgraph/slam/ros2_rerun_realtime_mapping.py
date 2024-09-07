@@ -917,7 +917,7 @@ camera_pose.shape: (4, 4)
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
                 time=time_msg,
-                timeout=rclpy.duration.Duration(seconds=0.3))
+                timeout=rclpy.duration.Duration(seconds=1.0))
             agent_pose = self._transform_stamped_to_matrix(vl_transform)
 
             return agent_pose
