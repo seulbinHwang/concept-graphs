@@ -1007,13 +1007,9 @@ def main(cfg: DictConfig):
         traceback.print_exc()
         if ros2_bridge is not None:
             ros2_bridge.wrap_up()
-            visualization_utils.merge_images(ros2_bridge._mask_images_dir,
-                                             ros2_bridge._results_3d_dir,
-                                             ros2_bridge._results_2d_dir)
             ros2_bridge.vis.destroy_window()
             ros2_bridge.destroy_node()
             rclpy.shutdown()
-            visualization_utils.create_gif_from_images()
 
 
 if __name__ == "__main__":
