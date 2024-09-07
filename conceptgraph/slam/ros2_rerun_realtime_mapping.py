@@ -19,7 +19,7 @@ import scipy.ndimage as ndi
 import torch
 from PIL import Image
 from tqdm import trange
-from open3d.io import read_pinhole_camera_parameters
+# from open3d.io import read_pinhole_camera_parameters
 import hydra
 from omegaconf import DictConfig
 import open_clip
