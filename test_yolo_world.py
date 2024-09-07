@@ -59,7 +59,7 @@ if __name__ == "__main__":
     try:
         for frame_idx, color_path in tqdm(enumerate(sorted_paths),
                                           total=len(sorted_paths)):
-            if frame_idx > 40:
+            if frame_idx > 15:
                 break
             start_time = time.time()
             image = cv2.imread(str(color_path))  # This will in BGR color space
