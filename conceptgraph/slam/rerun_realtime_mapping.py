@@ -159,8 +159,8 @@ def main(cfg: DictConfig):
     detections_exp_cfg = cfg_to_dict(cfg)
     obj_classes = ObjectClasses(
         classes_file_path=detections_exp_cfg['classes_file'],
-        bg_classes=detections_exp_cfg['bg_classes'],
-        skip_bg=detections_exp_cfg['skip_bg'])
+        bg_classes=detections_exp_cfg['bg_classes'], # "wall", "floor", "ceiling"
+        skip_bg=detections_exp_cfg['skip_bg']) # False
 
     # if we need to do detections
     # det_exp_path:

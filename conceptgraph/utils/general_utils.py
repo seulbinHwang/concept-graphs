@@ -349,14 +349,45 @@ def filter_detections(
     bool = True,  # Keep the larger bounding box by area if True, else keep the smaller
     min_mask_size_ratio=0.00025
 ) -> tuple[sv.Detections, list[str]]:
-    '''
-    Filter detections based on confidence, top X detections, and proximity of bounding boxes.
-    Args:
-        proximity_threshold (float): The minimum distance between centers of bounding boxes to consider them non-overlapping.
-        keep_larger (bool): If True, keeps the larger bounding box when overlaps occur; otherwise keeps the smaller.
-    Returns:
-        tuple[sv.Detections, list[str]]: Filtered detections and labels.
-    '''
+    """
+이 함수는 객체 탐지 후 후처리를 통해 탐지 결과를 필터링하는 로직을 구현
+주로 탐지된 객체들에 대한 신뢰도 기반 정렬, 상위 X개의 탐지 결과 유지, 
+    인접 객체 간의 겹침 또는 근접성을 평가하고, 
+    특정 조건에 따라 필터링된 탐지 결과를 반환하는 구조
+
+### 입력 데이터 처리:
+1. **탐지 객체 검증**: 
+    `detections` 객체가 `confidence`, `class_id`, `xyxy` 속성을 가지는지 확인
+    탐지 객체에 필요한 속성이 없다면 필터링을 중단하고 빈 리스트를 반환
+2. **탐지 결과 정렬**: 
+    `detections` 객체의 `confidence`(신뢰도), `class_id`(클래스 ID),
+     `xyxy`(바운딩 박스 좌표), `mask`(마스크 정보) 등을 결합하여 
+     `confidence` 값을 기준으로 내림차순으로 정렬
+     `top_x_detections` 값이 주어지면, 상위 `X`개의 탐지 결과만 남깁니다.
+
+### 필터링 로직:
+- **탐지 결과 간 근접성 및 겹침 필터링**:
+  1. **마스크 크기 평가**: 
+    탐지된 객체의 마스크 크기를 평가하여, 
+        `min_mask_size_ratio`로 설정된 임계값보다 작은 마스크를 가진 객체는 제거
+  2. **IoU(Intersection over Union)**: 
+    각 객체의 마스크 간 겹침 정도(IoU)를 계산하여, 
+        `iou_threshold` 이상의 겹침을 가진 경우 탐지 결과를 필터링
+    탐지 객체의 클래스 이름과 겹치는 객체의 클래스 이름을 출력
+  3. **중심점 거리 계산**: 
+    객체 간의 바운딩 박스 중심점 거리(proximity)를 계산하여, 
+    `proximity_threshold` 이내로 가까운 객체는 제거
+    근접성이 판단 기준일 때는 객체의 크기(면적)에 따라, 
+    `keep_larger` 플래그에 따라 더 큰 또는 더 작은 객체를 남기고 나머지는 제거
+  
+- **배경 클래스 필터링**: 
+    탐지된 객체가 배경 클래스(`bg_classes`)에 속하는 경우 이를 필터링하여 제거
+
+### 결과 생성:
+- 필터링된 탐지 결과에서 신뢰도, 클래스 ID, 좌표(xyxy), 마스크 정보를 추출하여 `sv.Detections` 객체를 다시 생성합니다.
+- 필터링된 탐지 객체들의 레이블 리스트도 함께 반환됩니다.
+
+    """
     if not (hasattr(detections, 'confidence') and
             hasattr(detections, 'class_id') and hasattr(detections, 'xyxy')):
         print("Detections object is missing required attributes.")
@@ -703,19 +734,49 @@ def load_saved_detections(base_path):
 
 class ObjectClasses:
     """
-    Manages object classes and their associated colors,
-        allowing for exclusion of background classes.
+객체 클래스 및 그에 대한 색상 정보를 관리하는 역할을 수행
+    특정 설정에 따라 배경 클래스를 포함하거나 제외할 수 있음
+주로 이미지 분할이나 객체 인식 모델에서 객체별 색상 매핑을 관리하는 데 사용
 
-    This class facilitates
-        the creation or loading of a color map
-            from a specified file containing class names.
-    It also manages background classes based on configuration, allowing for their
-    inclusion or exclusion.
-        Background classes are ["wall", "floor", "ceiling"] by default.
+### 클래스 초기화 (`__init__`):
+  - `classes_file_path`:
+        클래스 이름들이 정의된 파일의 경로입니다. 이 파일은 각 클래스 이름이 한 줄씩 포함
+  - `bg_classes`:
+        배경으로 간주될 클래스들의 목록
+        기본적으로는 `["wall", "floor", "ceiling"]`와 같은 클래스가 배경으로 간주
+  - `skip_bg`:
+        배경 클래스를 무시할지 여부를 결정하는 플래그
+        `True`일 경우 배경 클래스를 제외하고 나머지 클래스들만 사용
+- 클래스 초기화 시 `_load_or_create_colors` 메서드를 호출하여
+    클래스 이름과 각 클래스에 대응하는 색상을 초기화
 
-    Attributes:
-        classes_file_path (str):
-            Path to the file containing class names, one per line.
+### 색상 로딩 또는 생성 (`_load_or_create_colors`):
+- 클래스 이름을 **파일로부터 읽어온 뒤**,
+    `skip_bg` 플래그가 `True`일 경우 배경 클래스를 제외한 나머지 클래스를 필터링
+- **색상 정보**는 클래스 파일 경로와 동일한 경로에 위치한 `<파일명>_colors.json`에서 로드되며,
+    이 파일이 존재할 경우 그 데이터를 사용합니다.
+  - 색상 파일이 존재하면, 그 파일에서 클래스 이름에 대응하는 색상 맵을 로드합니다.
+    하지만, 클래스 파일의 내용과 색상 파일의 클래스가 불일치할 수 있으므로,
+        현재 사용 중인 클래스에 대한 색상만 필터링하여 유지
+- **색상 파일이 존재하지 않는 경우**,
+    각 클래스에 대해 RGB 값을 난수로 생성한 후 해당 색상 맵을 새로 생성된 JSON 파일에 저장
+- 결과적으로, 클래스 이름 리스트와 그에 대응하는 색상 딕셔너리를 반환합니다.
+
+### 클래스 배열 반환 (`get_classes_arr`):
+- 현재 관리되고 있는 클래스 이름 리스트를 반환합니다. 이는 배경 클래스가 제외된 상태일 수도 있음
+
+### 배경 클래스 배열 반환 (`get_bg_classes_arr`):
+- 배경 클래스로 지정된 클래스들의 리스트를 반환합니다.
+
+### 클래스 색상 반환 (`get_class_color`):
+- **클래스 이름 또는 인덱스를 입력**으로 받아 해당 클래스의 색상을 반환합니다.
+  - 인덱스가 주어지면, 클래스 리스트에서 해당 인덱스에 해당하는 클래스 이름을 찾아 색상을 반환합니다.
+  - 이름이 주어지면, 해당 이름이 클래스 리스트에 있는지 확인하고 그 클래스의 색상을 반환합니다.
+  - 색상이 정의되지 않은 경우에는 기본적으로 `[0, 0, 0]` (검정색)을 반환합니다.
+
+### 인덱스별 클래스 색상 딕셔너리 반환 (`get_class_color_dict_by_index`):
+- **클래스 인덱스를 키로 하고** 그에 대응하는 색상을 값으로 가지는 딕셔너리를 생성하여 반환
+이 과정에서는 `get_class_color` 메서드를 이용하여 각 인덱스의 색상을 가져옵니다.
 
     Usage:
         obj_classes = ObjectClasses(classes_file_path, skip_bg=True)
