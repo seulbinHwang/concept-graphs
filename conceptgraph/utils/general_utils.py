@@ -553,18 +553,26 @@ def make_vlm_edges_and_captions(image,
   - bg_classes 클래스 제거
     """
     # labels: detection_class_labels가 필터링된 것: ["sofa chair 0", ...]
-    filtered_detections, labels = filter_detections(
-        image=image,  #
-        detections=curr_det,
-        classes=obj_classes,
-        top_x_detections=150000,
-        confidence_threshold=0.00001,
-        given_labels=detection_class_labels,
-    )
+    if curr_det.xyxy.size == 0:
+        filtered_detections = curr_det
+        labels = detection_class_labels
+        detection_exists = False
+    else:
+        detection_exists = True
+        filtered_detections, labels = filter_detections(
+            image=image,  #
+            detections=curr_det,
+            classes=obj_classes,
+            top_x_detections=150000,
+            confidence_threshold=0.00001,
+            given_labels=detection_class_labels,
+        )
 
     edges = []
     captions = []
     edge_image = None
+
+
     if make_edges_flag:
         # det_exp_vis_path:
         # Datasets/Replica/room0/exps/s_detections_stride10/vis
@@ -575,6 +583,9 @@ def make_vlm_edges_and_captions(image,
         # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm.jpg
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
             det_exp_vis_path, color_path, frame_idx)
+        if not detection_exists:
+            cv2.imwrite(str(vis_save_path_for_vlm), image)
+            return labels, edges, edge_image, captions
         # vis_save_path_for_vlm_edges
         # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm_w_edges.jpg
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(

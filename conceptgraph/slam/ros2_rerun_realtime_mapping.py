@@ -341,7 +341,7 @@ class RealtimeHumanSegmenterNode(Node):
             ]
             # 원본 size 기준으로 xyxy 가 나온다는 것을 확인함
             xyxy_tensor = results[0].boxes.xyxy
-            xyxy_np = xyxy_tensor.cpu().numpy()
+            xyxy_np = xyxy_tensor.cpu().numpy() # (N, 4)
 
             # if there are detections,
             # Get Masks Using SAM or MobileSAM
