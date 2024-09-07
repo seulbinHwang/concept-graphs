@@ -1,5 +1,6 @@
 import copy
 import random
+from typing import Optional
 
 import numpy as np
 from ai2thor.controller import Controller
@@ -12,7 +13,7 @@ def rearrange_objects(
     controller: Controller,
     pickupable_move_ratio: float,
     moveable_move_ratio: float,
-    random_seed: int | None = None,
+    random_seed: Optional[int] = None,
     reset: bool = False,
 ):
     '''

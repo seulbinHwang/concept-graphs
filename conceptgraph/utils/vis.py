@@ -28,8 +28,8 @@ class OnlineObjectRenderer():
     '''
 
     def __init__(self,
-                 view_param: str | dict,
-                 base_objects: MapObjectList | None = None,
+                 view_param: Union[str , dict],
+                 base_objects: Optional[MapObjectList]= None,
                  gray_map: bool = False) -> None:
         # If the base objects are provided, we will visualize them
         if base_objects is not None:
@@ -85,11 +85,11 @@ class OnlineObjectRenderer():
     def step(
         self,
         image: Image.Image,
-        pcds: list[o3d.geometry.PointCloud] | None = None,
-        pcd_colors: np.ndarray | None = None,
-        est_pose: np.ndarray | None = None,
-        gt_pose: np.ndarray | None = None,
-        base_objects_color: dict | None = None,
+        pcds: Optional[List[o3d.geometry.PointCloud]]= None,
+        pcd_colors: Optional[np.ndarray] = None,
+        est_pose: Optional[np.ndarray] = None,
+        gt_pose: Optional[np.ndarray] = None,
+        base_objects_color: Optional[dict] = None,
         new_objects: MapObjectList = None,
         paint_new_objects: bool = True,
         return_vis_handle: bool = False,
@@ -235,7 +235,7 @@ def vis_result_fast_on_depth(
     depth_image: np.ndarray,
     detections: sv.Detections,
     classes: list[str],
-    color: Color | ColorPalette = ColorPalette.default(),
+    color: Union[Color , ColorPalette] = ColorPalette.default(),
     instance_random_color: bool = False,
     draw_bbox: bool = True,
 ) -> np.ndarray:
@@ -364,7 +364,7 @@ class CustomBoxAnnotator(sv.BoxAnnotator):
         text_padding: int = 10,
         detections: sv.Detections = None,
         labels: List[str] = None,
-        save_path: str | None = None,
+        save_path: Optional[str] = None,
     ):
         super().__init__(color, thickness, text_color, text_scale,
                          text_thickness, text_padding)
@@ -561,7 +561,7 @@ class CustomBoxAnnotator(sv.BoxAnnotator):
 def vis_result_for_vlm(image: np.ndarray,
                        detections: sv.Detections,
                        labels: list[str],
-                       color: Color | ColorPalette = ColorPalette.default(),
+                       color: Union[Color , ColorPalette] = ColorPalette.default(),
                        draw_bbox: bool = True,
                        thickness: int = 2,
                        text_scale: float = 0.3,
@@ -597,7 +597,7 @@ def vis_result_fast(
     image: np.ndarray,
     detections: sv.Detections,
     classes: list[str],
-    color: Color | ColorPalette = ColorPalette.default(),
+    color: Union[Color , ColorPalette] = ColorPalette.default(),
     instance_random_color: bool = False,
     draw_bbox: bool = True,
 ) -> np.ndarray:

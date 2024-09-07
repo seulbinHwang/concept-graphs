@@ -189,7 +189,7 @@ def get_sam_segmentation_from_xyxy(sam_predictor: SamPredictor,
     return np.array(result_masks)
 
 
-def get_sam_predictor(variant: str, device: str | int) -> SamPredictor:
+def get_sam_predictor(variant: str, device) -> SamPredictor:
     if variant == "sam":
         sam = sam_model_registry[SAM_ENCODER_VERSION](
             checkpoint=SAM_CHECKPOINT_PATH)
@@ -277,7 +277,7 @@ def get_sam_segmentation_dense(
 
 
 def get_sam_mask_generator(variant: str,
-                           device: str | int) -> SamAutomaticMaskGenerator:
+                           device) -> SamAutomaticMaskGenerator:
     if variant == "sam":
         sam = sam_model_registry[SAM_ENCODER_VERSION](
             checkpoint=SAM_CHECKPOINT_PATH)
