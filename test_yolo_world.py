@@ -54,10 +54,10 @@ if __name__ == "__main__":
 
     folder_path = 'frames_resized'  # Replace with the folder containing image files
     sorted_paths = get_sorted_image_paths(folder_path)
-    start_time = time.time()
     elapsed_time = 0.
     for frame_idx, color_path in tqdm(enumerate(sorted_paths),
                                       total=len(sorted_paths)):
+        start_time = time.time()
         image = cv2.imread(str(color_path))  # This will in BGR color space
         results = detection_model.predict(color_path,
                                           conf=0.25,
