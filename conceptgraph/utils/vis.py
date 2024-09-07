@@ -290,8 +290,8 @@ def old_filter_detections(
     classes: List[str],
     top_x_detections: Optional[int] = None,
     confidence_threshold: float = 0.0,
-    given_labels: Optional[list[str]] = None
-) -> Tuple[sv.Detections, list[str]]:
+    given_labels: Optional[List[str]] = None
+) -> Tuple[sv.Detections, List[str]]:
     '''
     Filter detections based on confidence threshold and top X detections.
     Returns a tuple of filtered detections and labels.
