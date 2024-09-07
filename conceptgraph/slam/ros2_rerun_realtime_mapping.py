@@ -110,7 +110,6 @@ class RealtimeHumanSegmenterNode(Node):
         self.orr.spawn()
 
         cfg = process_cfg(cfg)
-        print("args.device:", args.device)
         self.objects = MapObjectList(device=args.device)
         self.map_edges = MapEdgeMapping(self.objects)
 
@@ -121,7 +120,6 @@ class RealtimeHumanSegmenterNode(Node):
         # self.exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
         self.exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
                                              cfg.exp_suffix)
-        print("exp_out_path:", self.exp_out_path)
 
         # output folder of the detections experiment to use
         # det_exp_path: Datasets/Replica/room0/exps/s_detections_stride10
@@ -129,7 +127,6 @@ class RealtimeHumanSegmenterNode(Node):
                                              cfg.scene_id,
                                              cfg.detections_exp_suffix,
                                              make_dir=False)
-        print("det_exp_path:", self.det_exp_path)
 
         # we need to make sure to use the same classes as the ones used in the detections
         detections_exp_cfg = cfg_to_dict(cfg)
@@ -145,6 +142,7 @@ class RealtimeHumanSegmenterNode(Node):
         # check_run_detections: s_detections_stride10 폴더가 있으면 실시하지 않음
         self.run_detections = check_run_detections(cfg.force_detection,
                                                    self.det_exp_path)
+        self.run_detections = False
         # det_exp_pkl_path: exps/s_detections_stride10/detections
         self.det_exp_pkl_path = get_det_out_path(self.det_exp_path)
         # det_exp_vis_path: exps/s_detections_stride10/vis
