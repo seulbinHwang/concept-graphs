@@ -38,6 +38,7 @@ def get_sorted_image_paths(folder_path: str) -> List[str]:
     return sorted_paths
 
 if __name__ == "__main__":
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     classes_file = "./conceptgraph/scannet200_classes.txt"
     obj_classes = ObjectClasses(
         classes_file_path=classes_file,
@@ -51,40 +52,38 @@ if __name__ == "__main__":
 
     sam_predictor = SAM('sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
 
-    folder_path = 'frames'  # Replace with the folder containing image files
+    folder_path = 'frames_resized'  # Replace with the folder containing image files
     sorted_paths = get_sorted_image_paths(folder_path)
     start_time = time.time()
     elapsed_time = 0.
     for frame_idx, color_path in tqdm(enumerate(sorted_paths),
                                       total=len(sorted_paths)):
         image = cv2.imread(str(color_path))  # This will in BGR color space
-        print("image.shape:", image.shape) # (1080, 1920, 3)
         results = detection_model.predict(color_path,
-                                          conf=0.1,
-                                          verbose=False)
-        print("results[0].orig_shape:", results[0].orig_shape)
+                                          conf=0.25,
+                                          verbose=False,
+                                          device=device)
         confidences = results[0].boxes.conf.cpu().numpy()
-        print("confidences.shape:", confidences.shape)
         detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
             int)  # (N,)
 
         xyxy_tensor = results[0].boxes.xyxy
-        xyxy_np = xyxy_tensor.cpu().numpy()
-        print("xyxy_np.shape:", xyxy_np.shape)
+        xyxy_np = np.round(xyxy_tensor.cpu().numpy(), 2)
         if xyxy_tensor.numel() != 0:
             # segmentation
             sam_out = sam_predictor.predict(color_path,
                                             bboxes=xyxy_tensor,
-                                            verbose=False)
+                                            verbose=False,
+                                            device=device)
             masks_tensor = sam_out[0].masks.data
 
             masks_np = masks_tensor.cpu().numpy()  # (N, H, W)
-            print("masks_np.shape:", masks_np.shape)
         else:
             masks_np = np.empty((0, *image.shape[:2]),
                                 dtype=np.float64)
+
         curr_det = sv.Detections(
-            xyxy=xyxy_np,
+            xyxy=xyxy_np.copy(),
             confidence=confidences,
             class_id=detection_class_ids,
             mask=masks_np,
@@ -93,7 +92,7 @@ if __name__ == "__main__":
         a_elapsed_time = time.time() - start_time
         elapsed_time += a_elapsed_time
         annotated_image, labels = vis_result_fast(
-            image, curr_det, obj_classes.get_classes_arr(), draw_bbox=False)
+            image, curr_det, obj_classes.get_classes_arr(), draw_bbox=True)
         cv2.imwrite(str(vis_save_path), annotated_image)
 
     elapsed_time_per_frame = elapsed_time / len(sorted_paths)
