@@ -213,7 +213,6 @@ class RealtimeHumanSegmenterNode(Node):
                                                depth_sub_topic_name)
         """
         TODO: 큰 문제
-        - rgb_sub와 depth_sub의 차이 허용을 0.1초로 하니, depth가 많이 어긋난다.
         - 부탁드려서, rgb 보내는 것과 depth 보내는 것의 timestamp를 동일하게 해달라고 부탁 
         """
         self.ts = message_filters.ApproximateTimeSynchronizer(
@@ -430,7 +429,6 @@ class RealtimeHumanSegmenterNode(Node):
             ##### 5. [시작] VLM을 통해 edge와 caption 정보를 구한다.
             ##### 논문과 다르게, 현 이미지 1장에 대한 edge와 node caption 정보를 구한다.
             # image: np.zeros (H, W, 3)
-            # TODO: check
             # self.obj_classes: ObjectClasses
             # detection_class_labels = [ "sofa chair 0", ... ]
             # det_exp_vis_path: Datasets/Replica/room0/exps/s_detections_stride10/vis
@@ -468,7 +466,6 @@ class RealtimeHumanSegmenterNode(Node):
                 return
             ##### 2. [시작] CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
-            # TODO: check "rgb_array" 가 맞는지
             rgb_array_ = cv2.cvtColor(rgb_array, cv2.COLOR_BGR2RGB)
             image_crops, image_feats, text_feats = compute_clip_features_batched(
                 rgb_array_, curr_det, self.clip_model,
@@ -612,8 +609,7 @@ class RealtimeHumanSegmenterNode(Node):
         # this helps make sure things like 베개 on 소파 are separate objects.
         grounded_obs['mask'] = mask_subtract_contained(grounded_obs['xyxy'],
                                                        grounded_obs['mask'])
-        if not RUN_AFTER:
-            return
+
         """
 -----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------
 depth_array.shape: (680, 1200)
@@ -630,7 +626,7 @@ camera_pose.shape: (4, 4)
                 masks=grounded_obs['mask'],
                 cam_K=self.intrinsics.cpu().numpy()
                 [:3, :3],  # Camera intrinsics
-                image_rgb=None,
+                image_rgb=rgb_array_,
                 trans_pose=camera_pose,
                 min_points_threshold=self.cfg.min_points_threshold,  # 16
                 # overlap # "iou", "giou", "overlap"
@@ -638,7 +634,8 @@ camera_pose.shape: (4, 4)
                 obj_pcd_max_points=self.cfg.obj_pcd_max_points,  # 5000
                 device=self.cfg.device,
             )
-
+        if not RUN_AFTER:
+            return
         for obj in obj_pcds_and_bboxes:
             if obj:
                 # obj: {'pcd': pcd, 'bbox': bbox}
@@ -992,7 +989,6 @@ self.depth_dist_coeffs: [          0           0           0           0        
             config_name="rerun_realtime_mapping")
 def main(cfg: DictConfig):
 
-    # TODO: yaml로 옮겨야 함
     parser = argparse.ArgumentParser(
         description="RealtimeHumanSegmenterNode Node")
     parser.add_argument('--realsense_idx',
