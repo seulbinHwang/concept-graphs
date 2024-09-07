@@ -624,7 +624,7 @@ camera_pose.shape: (4, 4)
             detections_to_obj_pcd_and_bbox)(
                 depth_array=depth_array,
                 masks=grounded_obs['mask'],
-                cam_K=self.intrinsics.cpu().numpy()
+                cam_K=self.intrinsics
                 [:3, :3],  # Camera intrinsics
                 image_rgb=rgb_array_,
                 trans_pose=camera_pose,
