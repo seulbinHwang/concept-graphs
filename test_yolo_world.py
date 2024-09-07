@@ -56,46 +56,51 @@ if __name__ == "__main__":
     folder_path = 'frames_resized'  # Replace with the folder containing image files
     sorted_paths = get_sorted_image_paths(folder_path)
     elapsed_time = 0.
-    for frame_idx, color_path in tqdm(enumerate(sorted_paths),
-                                      total=len(sorted_paths)):
-        start_time = time.time()
-        image = cv2.imread(str(color_path))  # This will in BGR color space
-        results = detection_model.predict(color_path,
-                                          conf=0.25,
-                                          verbose=False,
-                                          device=device)
-        confidences = results[0].boxes.conf.cpu().numpy()
-        detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
-            int)  # (N,)
+    try:
+        for frame_idx, color_path in tqdm(enumerate(sorted_paths),
+                                          total=len(sorted_paths)):
+            if frame_idx > 10:
+                break
+            start_time = time.time()
+            image = cv2.imread(str(color_path))  # This will in BGR color space
+            results = detection_model.predict(color_path,
+                                              conf=0.25,
+                                              verbose=False,
+                                              device=device)
+            confidences = results[0].boxes.conf.cpu().numpy()
+            detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
+                int)  # (N,)
 
-        xyxy_tensor = results[0].boxes.xyxy
-        xyxy_np = np.round(xyxy_tensor.cpu().numpy(), 2)
-        if xyxy_tensor.numel() != 0:
-            # segmentation
-            sam_out = sam_predictor.predict(color_path,
-                                            bboxes=xyxy_tensor,
-                                            verbose=False,
-                                            device=device)
-            masks_tensor = sam_out[0].masks.data
+            xyxy_tensor = results[0].boxes.xyxy
+            xyxy_np = np.round(xyxy_tensor.cpu().numpy(), 2)
+            if xyxy_tensor.numel() != 0:
+                # segmentation
+                sam_out = sam_predictor.predict(color_path,
+                                                bboxes=xyxy_tensor,
+                                                verbose=False,
+                                                device=device)
+                masks_tensor = sam_out[0].masks.data
 
-            masks_np = masks_tensor.cpu().numpy()  # (N, H, W)
-        else:
-            masks_np = np.empty((0, *image.shape[:2]),
-                                dtype=np.float64)
+                masks_np = masks_tensor.cpu().numpy()  # (N, H, W)
+            else:
+                masks_np = np.empty((0, *image.shape[:2]),
+                                    dtype=np.float64)
 
-        curr_det = sv.Detections(
-            xyxy=xyxy_np.copy(),
-            confidence=confidences,
-            class_id=detection_class_ids,
-            mask=masks_np,
-        )
-        vis_save_path = os.path.join(save_dir, f"{frame_idx}.jpg")
-        a_elapsed_time = time.time() - start_time
-        elapsed_time += a_elapsed_time
-        # annotated_image, labels = vis_result_fast(
-        #     image, curr_det, obj_classes.get_classes_arr(), draw_bbox=True)
-        # cv2.imwrite(str(vis_save_path), annotated_image)
-
-    elapsed_time_per_frame = elapsed_time / len(sorted_paths)
-    print(f"Elapsed time: {elapsed_time} seconds")
-    print(f"Elapsed time per frame: {elapsed_time_per_frame} seconds")
+            curr_det = sv.Detections(
+                xyxy=xyxy_np.copy(),
+                confidence=confidences,
+                class_id=detection_class_ids,
+                mask=masks_np,
+            )
+            vis_save_path = os.path.join(save_dir, f"{frame_idx}.jpg")
+            a_elapsed_time = time.time() - start_time
+            elapsed_time += a_elapsed_time
+            # annotated_image, labels = vis_result_fast(
+            #     image, curr_det, obj_classes.get_classes_arr(), draw_bbox=True)
+            # cv2.imwrite(str(vis_save_path), annotated_image)
+    except:
+        pass
+    finally:
+        elapsed_time_per_frame = elapsed_time / len(sorted_paths)
+        print(f"Elapsed time: {elapsed_time} seconds")
+        print(f"Elapsed time per frame: {elapsed_time_per_frame} seconds")
