@@ -327,7 +327,7 @@ class RealtimeHumanSegmenterNode(Node):
         agent_pose = self._get_pose_data(depth_builtin_time)
         if agent_pose is None:
             return
-        camera_pose = agent_pose @ self._camera_to_agent
+        camera_pose = agent_pose @ self.extrinsic
         #################
         self.tracker.curr_frame_idx = self.frame_idx
         self.counter += 1
