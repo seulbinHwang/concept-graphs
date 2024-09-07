@@ -883,56 +883,6 @@ agent_pose.shape: (4, 4)
             if self.cfg.save_video:
                 save_video_detections(self.det_exp_path)
 
-    def _save_objects_result(
-            self, objects_info: List[Optional[segmentation_utils.ObjectInfo]]
-    ) -> None:
-        save_results_3d_path = os.path.join(self._results_3d_dir,
-                                            f"{self._frame_idx}.jpg")
-        point_clouds = [obj_info.pcd for obj_info in objects_info]
-        points_2d = [
-            np.asarray(obj_info.pcd.points)[:, :2]
-            for obj_info in objects_info
-            if obj_info is not None
-        ]
-        if self.args.debug_mode:
-            # debug visulize 시, 첫번째 mask는 전체 point cloud를 의미하기 때문에, None으로 설정
-            points_2d[0] = None
-        bbox_3ds = [
-            obj_info.bbox_3d
-            for obj_info in objects_info
-            if obj_info is not None
-        ]
-        bbox_2ds = [
-            obj_info.bbox_2d
-            for obj_info in objects_info
-            if obj_info is not None
-        ]
-        visualization_utils.save_results_3d(self.vis,
-                                            self.view_control,
-                                            point_clouds,
-                                            bbox_3ds,
-                                            save_path=save_results_3d_path)
-        save_results_2d_path = os.path.join(self._results_2d_dir,
-                                            f"{self._frame_idx}.jpg")
-        visualization_utils.save_results_2d(points_2d,
-                                            bbox_2ds,
-                                            save_path=save_results_2d_path)
-
-    def _publish_2d_bounding_boxes(
-            self, objects_info: List[Optional[segmentation_utils.ObjectInfo]]
-    ) -> None:
-        bounding_boxes = BoundingBox2DArray()
-        for object_info in objects_info:
-            if object_info is None:
-                continue
-            bbox = BoundingBox2D()
-            bbox.center.position.x = object_info.bbox_2d.center[0]
-            bbox.center.position.y = object_info.bbox_2d.center[1]
-            bbox.center.theta = object_info.bbox_2d.center[2]
-            bbox.size_x = object_info.bbox_2d.width
-            bbox.size_y = object_info.bbox_2d.height
-            bounding_boxes.boxes.append(bbox)
-        self.bounding_boxes_pub.publish(bounding_boxes)
 
     def _get_pose_data(self) -> Optional[np.ndarray]:
         # TODO: robot pose를 받아오도록 수정
