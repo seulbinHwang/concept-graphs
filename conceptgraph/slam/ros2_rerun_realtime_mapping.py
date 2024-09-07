@@ -294,10 +294,12 @@ class RealtimeHumanSegmenterNode(Node):
         rotation_matrix = tf_transformations.quaternion_matrix(quat)  # 4x4 행렬
 
         # 4x4 변환 행렬 생성
-        transform_matrix = np.identity(4)
-        transform_matrix[:3, :3] = rotation_matrix[:3, :3]  # 회전 부분 적용
-        transform_matrix[:3, 3] = trans  # 평행 이동 부분 적용
-
+        translation_matrix = np.identity(4)
+        translation_matrix[:, :3] = trans
+        # world_coord 기준 좌표 = transform_matrix @ agent_coord 기준 좌표
+        # TODO: inv(rotation_matrix) 를 써야하는지 확인해보기
+        transform_matrix = translation_matrix @ rotation_matrix
+        # transform_matrix: (4, 4)
         return transform_matrix
 
     def _add_all_true_mask(self, rgb_array: np.ndarray,
@@ -320,10 +322,10 @@ class RealtimeHumanSegmenterNode(Node):
 
         rgb_array = self.rgb_callback(rgb_msg)
         depth_array, depth_builtin_time = self.depth_callback(depth_msg)
-        # TODO: 세계 좌표계 기준 카메라 위치를 담도록 수정해야함
         agent_pose = self._get_pose_data(depth_builtin_time)
         if agent_pose is None:
             return
+        camera_pose = agent_pose @ self._camera_to_agent
         #################
         self.tracker.curr_frame_idx = self.frame_idx
         self.counter += 1
@@ -543,7 +545,7 @@ class RealtimeHumanSegmenterNode(Node):
 특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
     "이전 프레임의 카메라 위치"와 "현재 프레임의 카메라 위치"를 연결하는 경로를 시각적으로 나타냄
         """
-        self.prev_adjusted_pose = orr_log_camera(self.intrinsics, agent_pose,
+        self.prev_adjusted_pose = orr_log_camera(self.intrinsics, camera_pose,
                                                  self.prev_adjusted_pose,
                                                  self.cfg.image_width,
                                                  self.cfg.image_height,
@@ -618,7 +620,7 @@ depth_array.shape: (680, 1200)
 grounded_obs['mask'].shape: (N, 680, 1200)
 self.intrinsics.cpu().numpy()[:3, :3].shape: (3, 3)
 image_rgb.shape: (680, 1200, 3)
-agent_pose.shape: (4, 4)
+camera_pose.shape: (4, 4)
         """
         ##### 3. [시작] pointclouds 만들기
         # obj_pcds_and_bboxes : [ {'pcd': pcd, 'bbox': bbox} , ... ]
@@ -629,7 +631,7 @@ agent_pose.shape: (4, 4)
                 cam_K=self.intrinsics.cpu().numpy()
                 [:3, :3],  # Camera intrinsics
                 image_rgb=None,
-                trans_pose=agent_pose,
+                trans_pose=camera_pose,
                 min_points_threshold=self.cfg.min_points_threshold,  # 16
                 # overlap # "iou", "giou", "overlap"
                 spatial_sim_type=self.cfg.spatial_sim_type,  # overlap
@@ -830,7 +832,7 @@ agent_pose.shape: (4, 4)
         if self.cfg.save_objects_all_frames:
             save_objects_for_frame(self.obj_all_frames_out_path, self.frame_idx,
                                    self.objects, self.cfg.obj_min_detections,
-                                   agent_pose, color_path)
+                                   camera_pose, color_path)
 
         # periodically_save_pcd: False
         if self.cfg.periodically_save_pcd and (
@@ -918,8 +920,9 @@ agent_pose.shape: (4, 4)
                 source_frame=self._source_frame,
                 time=time_msg,
                 timeout=rclpy.duration.Duration(seconds=0.3))
-            camera_pose = self._transform_stamped_to_matrix(vl_transform)
-            return camera_pose
+            agent_pose = self._transform_stamped_to_matrix(vl_transform)
+
+            return agent_pose
         except LookupException:
             print("[pose tf listener]LookupException")
         except ConnectivityException:
