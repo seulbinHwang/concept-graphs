@@ -493,7 +493,8 @@ def make_vlm_edges_and_captions(image,
                                 color_path,
                                 make_edges_flag,
                                 openai_client,
-                                frame_idx=None):
+                                frame_idx=None,
+                                save_result=True):
     """
     Process detections by filtering, annotating, and extracting object relationships.
 
@@ -529,8 +530,7 @@ def make_vlm_edges_and_captions(image,
         filtered_detections = curr_det
         labels = detection_class_labels
         detection_exists = False
-    else:
-        print("curr_det.xyxy.shape:", curr_det.xyxy.shape)
+    elif openai_client:
         detection_exists = True
         filtered_detections, labels = filter_detections(
             image=image,  #
@@ -540,23 +540,22 @@ def make_vlm_edges_and_captions(image,
             confidence_threshold=0.00001,
             given_labels=detection_class_labels,
         )
+    else:
+        detection_exists = True
+        filtered_detections = curr_det
+        labels = detection_class_labels
     edges = []
     captions = []
     edge_image = None
-
-    if make_edges_flag:
-        # det_exp_vis_path:
-        # Datasets/Replica/room0/exps/s_detections_stride10/vis
-        # color_path
-        # Datasets/Replica/room0/results/frame000000.jpg
-
-        # vis_save_path_for_vlm
-        # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm.jpg
-        vis_save_path_for_vlm = get_vlm_annotated_image_path(
-            det_exp_vis_path, color_path, frame_idx)
-        if not detection_exists:
+    # vis_save_path_for_vlm
+    # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm.jpg
+    vis_save_path_for_vlm = get_vlm_annotated_image_path(
+        det_exp_vis_path, color_path, frame_idx)
+    if not detection_exists:
+        if save_result:
             cv2.imwrite(str(vis_save_path_for_vlm), image)
-            return labels, edges, edge_image, captions
+        return labels, edges, edge_image, captions
+    if make_edges_flag:
         # vis_save_path_for_vlm_edges
         # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm_w_edges.jpg
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
@@ -579,8 +578,8 @@ def make_vlm_edges_and_captions(image,
             label_name = re.sub(r'\s*\d+$', '', label).strip()
             full_label = f"{label_num}: {label_name}"
             label_list.append(full_label)
-
-        cv2.imwrite(str(vis_save_path_for_vlm), annotated_image_for_vlm)
+        if save_result:
+            cv2.imwrite(str(vis_save_path_for_vlm), annotated_image_for_vlm)
         print(f"Line 313, vis_save_path_for_vlm: {vis_save_path_for_vlm}")
         if openai_client:
             # object들에 대한 관계 파악
@@ -597,6 +596,10 @@ def make_vlm_edges_and_captions(image,
             captions = get_obj_captions_from_image_gpt4v(
                 openai_client, vis_save_path_for_vlm, label_list)
             # 탐지된 객체 간의 관계(엣지)를 이미지에 시각적으로 표시하는 작업입니다.
+            if save_result:
+                save_path = vis_save_path_for_vlm_edges
+            else:
+                save_path = None
             edge_image = plot_edges_from_vlm(
                 annotated_image_for_vlm,
                 edges,
@@ -604,7 +607,7 @@ def make_vlm_edges_and_captions(image,
                 obj_classes,
                 labels,
                 sorted_indices,
-                save_path=vis_save_path_for_vlm_edges)
+                save_path=save_path)
     # labels: detection_class_labels가 필터링된 것: ["sofa chair 0", ...]
     return labels, edges, edge_image, captions
 

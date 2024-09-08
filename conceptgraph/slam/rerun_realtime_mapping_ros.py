@@ -453,13 +453,13 @@ class RealtimeHumanSegmenterNode(Node):
     {"id": "2", "name": "object2", "caption": "concise description of object2"}
 ]
             """
-            labels, edges, edge_image, captions = make_vlm_edges_and_captions(
+            labels, edges, _, captions = make_vlm_edges_and_captions(
                 rgb_array, curr_det, self.obj_classes, detection_class_labels,
                 self.det_exp_vis_path, color_path, self.cfg.make_edges,
-                self.openai_client, self.frame_idx)
+                self.openai_client, self.frame_idx, save_result = True)
+            # TODO: 더비겅이 완료된 후엔, save_result = False로 해야함.
             ##### 1.2. [끝]
 
-            # del edge_image
             """
         image_crops: List[Image.Image]
             - 잘라낸 이미지들의 리스트 (길이: N)
@@ -1070,7 +1070,7 @@ self.depth_dist_coeffs: [          0           0           0           0        
 
 @hydra.main(version_base=None,
             config_path="../hydra_configs/",
-            config_name="rerun_realtime_mapping2")
+            config_name="rerun_realtime_mapping_ros")
 def main(cfg: DictConfig):
 
     parser = argparse.ArgumentParser(

@@ -1,10 +1,10 @@
 defaults:
   - base
   - base_mapping
-  - replica2
+  - replica_ros
 #  - record3d
   - sam
-  - classes
+  - classes_ros
   - logging_level
   - _self_
 
