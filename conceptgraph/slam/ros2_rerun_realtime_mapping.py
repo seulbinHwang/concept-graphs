@@ -183,6 +183,7 @@ class RealtimeHumanSegmenterNode(Node):
 
         if cfg.save_objects_all_frames:
             # exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
+            # obj_all_frames_out_path: room0/exps/r_mapping_stride10/saved_obj_all_frames/det_s_detections_stride10
             self.obj_all_frames_out_path = (self.exp_out_path /
                                             "saved_obj_all_frames" /
                                             f"det_{cfg.detections_exp_suffix}")
@@ -313,6 +314,7 @@ class RealtimeHumanSegmenterNode(Node):
 
     def sync_callback(self, rgb_msg: CompressedImage,
                       depth_msg: CompressedImage):
+        #### 1. frame 처리
         self.frame_idx += 1
 
         color_path = None
@@ -325,7 +327,6 @@ class RealtimeHumanSegmenterNode(Node):
         if agent_pose is None:
             return
         camera_pose = agent_pose @ self.extrinsic
-        #################
         self.tracker.curr_frame_idx = self.frame_idx
         self.counter += 1
         self.orr.set_time_sequence("frame", self.frame_idx)
@@ -355,7 +356,7 @@ class RealtimeHumanSegmenterNode(Node):
             frame_idx=self.frame_idx,
             w_edges=True)
         if self.run_detections:
-            ##### 1. [시작] RGBD에서 instance segmentation 진행
+            ##### 1.1. [시작] RGBD에서 instance segmentation 진행
             results = self.detection_model.predict(
                 rgb_array, conf=self.cfg.mask_conf_threshold, verbose=False)
             confidences = results[0].boxes.conf.cpu().numpy()
@@ -395,7 +396,7 @@ class RealtimeHumanSegmenterNode(Node):
                 class_id=detection_class_ids,
                 mask=masks_np,
             )
-            ##### 1. [끝] RGBD에서 instance segmentation 진행
+            ##### 1.1. [끝] RGBD에서 instance segmentation 진행
 
             # Make the edges
             # detection_class_labels: ["sofa chair 0", ...]
@@ -426,8 +427,6 @@ class RealtimeHumanSegmenterNode(Node):
                         - 부정확할 수 있으므로 VLM을 통해 caption을 구한다고 한다.
             """
 
-            ##### 5. [시작] VLM을 통해 edge와 caption 정보를 구한다.
-            ##### 논문과 다르게, 현 이미지 1장에 대한 edge와 node caption 정보를 구한다.
             # image: np.zeros (H, W, 3)
             # self.obj_classes: ObjectClasses
             # detection_class_labels = [ "sofa chair 0", ... ]
@@ -445,13 +444,22 @@ class RealtimeHumanSegmenterNode(Node):
     - vis_save_path_for_vlm
 
             """
-
+            ##### 1.2. [시작] 후처리 후, "프레임 w 노드" 그림을 그리고,
+            # VLM에 통과시켜 edge와 개별 물체 caption 정보를 구한다.
+            """
+            captions
+[
+    {"id": "1", "name": "object1", "caption": "concise description of object1"},
+    {"id": "2", "name": "object2", "caption": "concise description of object2"}
+]
+            """
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
                 rgb_array, curr_det, self.obj_classes, detection_class_labels,
                 self.det_exp_vis_path, color_path, self.cfg.make_edges,
                 self.openai_client, self.frame_idx)
+            ##### 1.2. [끝]
+
             # del edge_image
-            ##### 5. [끝] VLM을 통해 edge와 caption 정보를 구한다.
             """
         image_crops: List[Image.Image]
             - 잘라낸 이미지들의 리스트 (길이: N)
@@ -464,14 +472,14 @@ class RealtimeHumanSegmenterNode(Node):
                 print("No detections found in the image")
                 self.prev_adjusted_pose = camera_pose
                 return
-            ##### 2. [시작] CLIP feature를 계산
+            ##### 1.3. [시작] 개별 objects에 대한 CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
             rgb_array_ = cv2.cvtColor(rgb_array, cv2.COLOR_BGR2RGB)
             image_crops, image_feats, text_feats = compute_clip_features_batched(
                 rgb_array_, curr_det, self.clip_model,
                 self.clip_preprocess, self.clip_tokenizer,
                 self.obj_classes.get_classes_arr(), self.cfg.device)
-            ##### 2. [끝] CLIP feature를 계산
+            ##### 1.3. [끝]
 
             # increment total object detections
             self.tracker.increment_total_detections(len(curr_det.xyxy))
@@ -494,6 +502,7 @@ class RealtimeHumanSegmenterNode(Node):
                 # len = 19, "sofa chair 0" -> detection_class_labels을 필터링한 것
                 # TODO: 이게 왜 필요하지?
                 "labels": labels,
+                # TODO: 이게 왜 필요하지?
                 "edges": edges,  # len = 0
                 "captions": captions,  # len = 0
             }
@@ -501,6 +510,7 @@ class RealtimeHumanSegmenterNode(Node):
 
             # save the detections if needed
             # important
+            ##### 1.4. [시작] frame 내 결과 3장 저장하기
             if self.cfg.save_detections:
                 # self.det_exp_vis_path:
                 # Datasets/Replica/room0/exps/s_detections_stride10/vis
@@ -508,7 +518,7 @@ class RealtimeHumanSegmenterNode(Node):
                 # Datasets/Replica/room0/results/frame000000.jpg
                 # vis_save_path:
                 # Datasets/Replica/room0/exps/s_detections_stride10/vis/frame000000.jpg
-                """ 4장 그림 그려서 저장하는 과정임
+                """ 3장 그림 그려서 저장하는 과정임
                 vis_save_path: bounding box와 mask가 모두 그려진 이미지
 
                 """
@@ -535,8 +545,7 @@ class RealtimeHumanSegmenterNode(Node):
                     depth_image_rgb)
                 save_detection_results(
                     self.det_exp_pkl_path / vis_save_path.stem, results)
-
-        ########
+            ##### 1.4. [끝] frame 내 결과 3장 저장하기
         """
 카메라의 내재적(intrinsic) 및 외재적(extrinsic) 파라미터를 로깅하는 역할
 특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
@@ -577,17 +586,10 @@ class RealtimeHumanSegmenterNode(Node):
         # CHECK: 아마 현재는 resize 가 필요 없어 보입니다.
         # resized_grounded_obs = resize_gobs(raw_grounded_obs, rgb_array)
         resized_grounded_obs = raw_grounded_obs
-        ##### 1.1. [시작] segmentation 결과 필터링
+        ##### 1.5. [시작]  프레임 내 segmentation 결과 필터링
         """
-2. **필터링 기준 설정**:
-     - **마스크 면적**: (적용)
-        - 마스크의 면적이 `mask_area_threshold`보다 작은 객체는 필터링 ( 25 )
-     - **배경 클래스 필터링**: 
-        - `skip_bg`가 활성화된 경우, 배경 클래스(`BG_CLASSES`)에 속하는 객체는 필터링
-     - **경계 상자 면적 비율**:  (적용)
-        - 경계 상자 면적이 이미지의 `max_bbox_area_ratio(0.5)`를 초과하는 객체는 필터링
-     - **신뢰도 필터링**: 
-        - 객체의 신뢰도가 `mask_conf_threshold`보다 낮은 경우 해당 객체는 필터링
+ **필터링 기준 설정**:
+    매우 작거나(25) + 배경을 제거하거나 (skip_bg=True) + 이미지 크기의 50% 이상 물체 제거
         """
         filtered_grounded_obs = filter_gobs(
             resized_grounded_obs,
@@ -599,7 +601,6 @@ class RealtimeHumanSegmenterNode(Node):
             max_bbox_area_ratio=self.cfg.max_bbox_area_ratio,  # 0.5
             mask_conf_threshold=None,  #self.cfg.mask_conf_threshold, # 0.25
         )
-        ##### 1.1. [끝] segmentation 결과 필터링
 
         grounded_obs = filtered_grounded_obs
 
@@ -609,6 +610,8 @@ class RealtimeHumanSegmenterNode(Node):
         # this helps make sure things like 베개 on 소파 are separate objects.
         grounded_obs['mask'] = mask_subtract_contained(grounded_obs['xyxy'],
                                                        grounded_obs['mask'])
+
+        ##### 1.5. [끝]  프레임 내 segmentation 결과 필터링
         """
 -----------all shapes of detections_to_obj_pcd_and_bbox inputs:--------
 depth_array.shape: (680, 1200)
@@ -617,7 +620,9 @@ self.intrinsics.cpu().numpy()[:3, :3].shape: (3, 3)
 image_rgb.shape: (680, 1200, 3)
 camera_pose.shape: (4, 4)
         """
-        ##### 3. [시작] pointclouds 만들기
+        #### 2. pcd 처리
+
+        ##### 2.1. [시작] 3d pointcloud 만들기
         # obj_pcds_and_bboxes : [ {'pcd': pcd, 'bbox': bbox} , ... ]
         obj_pcds_and_bboxes: List[Dict[str, Any]] = measure_time(
             detections_to_obj_pcd_and_bbox)(
@@ -632,7 +637,7 @@ camera_pose.shape: (4, 4)
                 obj_pcd_max_points=self.cfg.obj_pcd_max_points,  # 5000
                 device=self.cfg.device,
             )
-
+        ##### 2.1. [끝] 3d pointcloud 만들기
         for obj in obj_pcds_and_bboxes:
             if obj:
                 # obj: {'pcd': pcd, 'bbox': bbox}
@@ -642,7 +647,7 @@ camera_pose.shape: (4, 4)
                     노이즈를 제거하여 클러스터링을 통해 중요한 포인트만 남기는 것
                     0.1m 거리 내의 cluster 을 모으는데, 최소 10개 포인트가 있어야 한다.
                 """
-                ##### 3.1. [시작] pointclouds 필터링
+                ##### 2.2. [시작] pointclouds 필터링
                 obj["pcd"] = init_process_pcd(
                     pcd=obj["pcd"],
                     downsample_voxel_size=self.
@@ -651,49 +656,38 @@ camera_pose.shape: (4, 4)
                     dbscan_eps=self.cfg["dbscan_eps"],  # 0.1
                     dbscan_min_points=self.cfg["dbscan_min_points"],  # 10
                 )
+                # TODO: 중복된 bounding box 계산 1번으로 줄이기 ?
                 # point cloud를 filtering 했으니, bounding box를 다시 계산
                 obj["bbox"] = get_bounding_box(
                     spatial_sim_type=self.cfg['spatial_sim_type'],  # overlap
                     pcd=obj["pcd"],
                 )
-                ##### 3.1. [끝] pointclouds 필터링
+                ##### 2.2. [끝] pointclouds 필터링
         """
         obj_pcds_and_bboxes : [ {'pcd': pcd, 'bbox': bbox} , ... ]
             grounded_obs = {
                 # add new uuid for each detection
                 "xyxy": curr_det.xyxy,  # (34, 4)
                 "confidence": curr_det.confidence,  # (34,)
-                "class_id": curr_det.class_id,  # (34,)
-                "mask": curr_det.mask,  # (34, 680, 1200)
-                "classes":
-                    self.obj_classes.get_classes_arr(),  # len = 200, "alarm clock"
-                "image_crops": image_crops,  # len = 34, <PIL.Image.Image>
-                "image_feats": image_feats,  # (34, 1024)
-                "text_feats": text_feats,  # len = 0 # 아마?
-                "detection_class_labels":
-                    detection_class_labels,  # len = 34, "sofa chair 0"
-                "labels": labels,  # len = 19, "sofa chair 0"
-                "edges": edges,  # len = 0
-                "captions": captions,  # len = 0
+                ...
             }
-        color_path: Datasets/Replica/room0/results/frame000000.jpg
-
+        # color_path: Datasets/Replica/room0/results/frame000000.jpg
         """
+        ##### 2.3. [시작] frame 결과와 frame 3차원 결과 융합
         detection_list = make_detection_list_from_pcd_and_gobs(
             obj_pcds_and_bboxes, grounded_obs, color_path, self.obj_classes,
             self.frame_idx)
         if len(detection_list) == 0:  # no detections, skip
             return
-        ##### 3. [끝] pointclouds 만들기
+        ##### 2.3. [끝] frame 결과와 frame 3차원 결과 융합
 
-        ##### 4. [시작] 기존 object 들과 융합하기
-
-        # if no objects yet in the map,
-        # just add all the objects from the current frame
-        # then continue, no need to match or merge
+        #### 3. 기존 object pcd와 융합
+        ##### 3.1. [시작] 기존 object들과 융합하기
+        # 아무것도 없었으면, 그냥 추가
         if len(self.objects) == 0:
             self.objects.extend(detection_list)
             self.tracker.increment_total_objects(len(detection_list))
+            # TODO: return이 맞나?
             return
 
         ### compute similarities and then merge
@@ -702,18 +696,19 @@ camera_pose.shape: (4, 4)
             spatial_sim_type=self.cfg['spatial_sim_type'],  # overlap
             detection_list=detection_list,
             objects=self.objects,
+            # downsample_voxel_size: pointcloud 거리 기준 (0.01m)
             downsample_voxel_size=self.cfg['downsample_voxel_size'])  # 0.01
         # visual_sim :  (새 검지 개수, 누적 물체 개수) -> 각 값은 det와 obj의 코싸인 유사도
         visual_sim = compute_visual_similarities(detection_list, self.objects)
 
         # match_method = "sim_sum" # "sep_thresh", "sim_sum"
-        # phys_bias = 0.0
-        # 단순하게 두개를 그냥 더함
+        # "sim_sum": 단순하게 두개를 그냥 더함
         # agg_sim : (새 검지 개수, 누적 물체 개수) -> 각 값은 det와 obj의 유사도
-        agg_sim = aggregate_similarities(match_method=self.cfg['match_method'],
-                                         phys_bias=self.cfg['phys_bias'],
-                                         spatial_sim=spatial_sim,
-                                         visual_sim=visual_sim)
+        agg_sim = aggregate_similarities(
+            match_method=self.cfg['match_method'],
+            phys_bias=self.cfg['phys_bias'],  # 0.0
+            spatial_sim=spatial_sim,
+            visual_sim=visual_sim)
 
         # Perform matching of detections to existing self.objects .
         # match_indices: 길이는 "새 검지 개수"
@@ -722,6 +717,7 @@ camera_pose.shape: (4, 4)
             detection_threshold=self.cfg['sim_threshold']  # 1.2
         )
 
+        # 병합 후, downsample 진행하고, dbscan 으로 노이즈 잘라냅니다.
         self.objects = merge_obj_matches(
             detection_list=detection_list,
             objects=self.objects,
@@ -734,13 +730,9 @@ camera_pose.shape: (4, 4)
             device=self.cfg['device']
             # Note: Removed 'match_method' and 'phys_bias' as they do not appear in the provided merge function
         )
-        if not RUN_AFTER:
-            print("RUN_AFTER RUN_AFTER RUN_AFTER RUN_AFTER RUN_AFTER  is False")
-            return
-        ##### 4. [끝] 기존 object 들과 융합하기
 
         # fix the class names for self.objects
-        # they should be the most popular name, not the first name
+        # they should be the most popular name, not the first name .
         for idx, obj in enumerate(self.objects):
             temp_class_name = obj["class_name"]  # "sofa chair"
             curr_obj_class_id_counter = Counter(obj['class_id'])
@@ -751,25 +743,30 @@ camera_pose.shape: (4, 4)
             if temp_class_name != most_common_class_name:
                 obj["class_name"] = most_common_class_name
 
-        ##### 5. [시작] edge 계산하기
+        ##### 3.2. [끝] 기존 object들과 융합하기
 
-        self.map_edges = process_edges(match_indices, grounded_obs,
-                                       len(self.objects), self.objects,
-                                       self.map_edges, self.frame_idx)
-        # Clean up outlier edges
-        edges_to_delete = []
-        for curr_map_edge in self.map_edges.edges_by_index.values():
-            curr_obj1_idx = curr_map_edge.obj1_idx
-            curr_obj2_idx = curr_map_edge.obj2_idx
-            curr_first_detected = curr_map_edge.first_detected
-            curr_num_det = curr_map_edge.num_detections
-            if (self.frame_idx - curr_first_detected > 5) and curr_num_det < 2:
-                edges_to_delete.append((curr_obj1_idx, curr_obj2_idx))
-        for edge in edges_to_delete:
-            self.map_edges.delete_edge(edge[0], edge[1])
-        ### Perform post-processing periodically if told so
+        ##### 3.2. [시작] edge 계산하기
+        if self.cfg["make_edges"]:
+            self.map_edges = process_edges(match_indices, grounded_obs,
+                                           len(self.objects), self.objects,
+                                           self.map_edges, self.frame_idx)
+            # Clean up outlier edges
+            edges_to_delete = []
+            for curr_map_edge in self.map_edges.edges_by_index.values():
+                curr_obj1_idx = curr_map_edge.obj1_idx
+                curr_obj2_idx = curr_map_edge.obj2_idx
+                curr_first_detected = curr_map_edge.first_detected
+                curr_num_det = curr_map_edge.num_detections
+                if (self.frame_idx - curr_first_detected
+                        > 5) and curr_num_det < 2:
+                    edges_to_delete.append((curr_obj1_idx, curr_obj2_idx))
+            for edge in edges_to_delete:
+                self.map_edges.delete_edge(edge[0], edge[1])
+        ##### 3.2. [끝] edge 계산하기
 
-        ##### 6. [시작] 주기적 "누적 object" 후처리
+        #### 4. 주기적 후처리
+
+        ##### 4.1. [시작] 주기적 "누적 object" 후처리
 
         # Denoising
         if processing_needed(
@@ -778,6 +775,7 @@ camera_pose.shape: (4, 4)
                 self.cfg["run_denoise_final_frame"],  # True
                 self.frame_idx,
         ):
+            # TODO: 병합 때 downsample + dbscan 을 했는데, 여기서도 또 한번 하는 이유가 뭘까?
             self.objects = measure_time(denoise_objects)(
                 downsample_voxel_size=self.cfg['downsample_voxel_size'],  # 0.01
                 dbscan_remove_noise=self.cfg['dbscan_remove_noise'],  # True
@@ -788,15 +786,16 @@ camera_pose.shape: (4, 4)
                 objects=self.objects)
 
         # Filtering
+        # 저는 안합니다.
         if processing_needed(
-                # Filter objects that have too few associations or are too small
+                # Filter objects that have too few associations or are too small.
                 self.cfg["filter_interval"],  # 5
                 self.cfg["run_filter_final_frame"],  # True
                 self.frame_idx,
         ):
             self.objects = filter_objects(
-                obj_min_points=self.cfg['obj_min_points'],
-                obj_min_detections=self.cfg['obj_min_detections'],
+                obj_min_points=self.cfg['obj_min_points'],  # 0
+                obj_min_detections=self.cfg['obj_min_detections'],  # 1
                 objects=self.objects,
                 map_edges=self.map_edges)
 
@@ -807,33 +806,71 @@ camera_pose.shape: (4, 4)
                 self.cfg["run_merge_final_frame"],  # True
                 self.frame_idx,
         ):
+            """
+             거리 유사도 / 시각적 유사도가 모두 threshold를 넘으면 병합 -> 
+                병합 시 , downsampling + dbscan으로 노이즈 제거
+            현재까지 만들어진 object 들 자기들끼리 비교
+            """
             self.objects, self.map_edges = measure_time(merge_objects)(
-                merge_overlap_thresh=self.cfg["merge_overlap_thresh"],
-                merge_visual_sim_thresh=self.cfg["merge_visual_sim_thresh"],
-                merge_text_sim_thresh=self.cfg["merge_text_sim_thresh"],
+                merge_overlap_thresh=self.cfg["merge_overlap_thresh"],  # 0.7
+                # Merge only if the visual similarity is larger than this threshold
+                merge_visual_sim_thresh=self.
+                cfg["merge_visual_sim_thresh"],  # 0.7
+                # Merge only if the text similarity is larger than this threshold
+                merge_text_sim_thresh=self.cfg["merge_text_sim_thresh"],  # 0.7
                 objects=self.objects,
-                downsample_voxel_size=self.cfg["downsample_voxel_size"],
-                dbscan_remove_noise=self.cfg["dbscan_remove_noise"],
-                dbscan_eps=self.cfg["dbscan_eps"],
-                dbscan_min_points=self.cfg["dbscan_min_points"],
-                spatial_sim_type=self.cfg["spatial_sim_type"],
-                device=self.cfg["device"],
-                do_edges=self.cfg["make_edges"],
+                downsample_voxel_size=self.cfg["downsample_voxel_size"],  # 0.01
+                dbscan_remove_noise=self.cfg["dbscan_remove_noise"],  # True
+                dbscan_eps=self.cfg["dbscan_eps"],  # 0.1
+                dbscan_min_points=self.cfg["dbscan_min_points"],  # 10
+                spatial_sim_type=self.cfg["spatial_sim_type"],  # overlap
+                device=self.args.device,
+                do_edges=self.cfg["make_edges"],  # True
                 map_edges=self.map_edges)
         orr_log_objs_pcd_and_bbox(self.objects, self.obj_classes)
         orr_log_edges(self.objects, self.map_edges, self.obj_classes)
 
-        ##### 6. [끝] 주기적 "누적 object" 후처리
+        ##### 4.1. [끝] 주기적 "누적 object" 후처리
+        if not RUN_AFTER:
+            print(
+                "\n\n\n\n\n RUN_AFTER RUN_AFTER RUN_AFTER RUN_AFTER RUN_AFTER  is False"
+            )
+            return
 
+        ##### 4.2. [시작] 매 frame 마다 object 결과 저장 (사용하면 매번 저장)
         if self.cfg.save_objects_all_frames:
+            # obj_all_frames_out_path:
+            # room0/exps/r_mapping_stride10/saved_obj_all_frames/det_s_detections_stride10/
+            #
+            # {frame_idx:06d}.pkl.gz
+            # obj_min_detections: 1
+            """ save_objects_for_frame (아래의 것들을 압축하여 하나의 파일로 저장)
+ - `camera_pose`: 조정된 카메라의 위치 정보(`adjusted_pose`).
+ - `objects`: 필터링 및 준비된 객체 리스트(`prepared_objects`).
+ - `frame_idx`: 현재 프레임 인덱스(`frame_idx`).
+ - `num_objects`: 객체의 개수.
+ - `color_path`: 프레임에 대한 이미지 경로(`color_path`).
+            """
             save_objects_for_frame(self.obj_all_frames_out_path, self.frame_idx,
                                    self.objects, self.cfg.obj_min_detections,
                                    camera_pose, color_path)
+        ##### 4.2. [끝] 매 frame 마다 object 결과 저장 (사용하면 매번 저장)
 
+        ##### 4.3. [시작] 주기적으로 3d pcd 결과 저장
         # periodically_save_pcd: False
+        # periodically_save_pcd_interval: 10
         if self.cfg.periodically_save_pcd and (
                 self.counter % self.cfg.periodically_save_pcd_interval == 0):
             # save the pointcloud
+            """
+1. **저장할 결과 딕셔너리 준비**
+ - `objects`: 객체 리스트로, `to_serializable()` 메서드를 사용해 직렬화 가능한 형태로 변환
+ - `cfg`: 실험 설정 정보를 `cfg_to_dict(cfg)` 함수를 통해 딕셔너리로 변환
+ - `class_names`: 객체 클래스 이름 배열로, `get_classes_arr()` 메서드를 통해 가져옵니다.
+ - `class_colors`: 객체 클래스의 색상 정보를 `get_class_color_dict_by_index()` 메서드를 통해 가져옵니다.
+ - `edges`: 객체 간 연결 정보를 직렬화 가능한 형태로 변환하여 포함시키며, `edges`가 제공되지 않은 경우 `None`으로 설정
+pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
+            """
             save_pointcloud(exp_suffix=self.cfg.exp_suffix,
                             exp_out_path=self.exp_out_path,
                             cfg=self.cfg,
@@ -844,28 +881,61 @@ camera_pose.shape: (4, 4)
 
         self.tracker.increment_total_objects(len(self.objects))
         self.tracker.increment_total_detections(len(detection_list))
+        ## 4.3. [끝] 주기적으로 3d pcd 결과 저장
+
         #################
 
     def wrap_up(self):
-        # Consolidate captions
+        #### 5. wrap_up
 
-        ##### 7. [시작] 각 물체마다, caption 합치기
+        ##### 5.1. [시작] 각 물체마다, LLM 사옹해서 caption 여러개를 하나로 합치기
         for object in self.objects:
+            """
+            captions
+[
+    {"id": "1", "name": "object1", "caption": "concise description of object1"},
+    {"id": "1", "name": "object1", "caption": "concise 2 description of object1"}
+]
+            """
             obj_captions = object['captions'][:20]  # 첫 20개만 사용
+            # LLM 사옹해서 caption 합치기
             consolidated_caption = consolidate_captions(self.openai_client,
                                                         obj_captions)
             object['consolidated_caption'] = consolidated_caption
-        ##### 7. [끝] 각 물체마다, caption 합치기
+        ##### 5.1. [끝] 각 물체마다, LLM 사옹해서 caption 여러개를 하나로 합치기
 
         # exp_suffix: r_mapping_stride10
         # self.exp_out_path: exps/r_mapping_stride10/
-        handle_rerun_saving(self.cfg.use_rerun, self.cfg.save_rerun,
-                            self.cfg.exp_suffix, self.exp_out_path)
+        # rerun_file_path:
+        #   exps/r_mapping_stride10/rerun_r_mapping_stride10.rrd
+        # PRINT 문만 띄어주는 역할
+        ##### 5.2. [시작] rerun 결과 저장하기
+        handle_rerun_saving(
+            self.cfg.use_rerun,
+            self.cfg.save_rerun,  # True
+            self.cfg.exp_suffix,
+            self.exp_out_path)
+        ##### 5.2. [끝]
 
-        # Save the pointcloud
+        ##### 5.3. [시작] save_pcd / object.json , edge.json (save_json)
         if self.cfg.save_pcd:  # True
             # exp_suffix: rerun_r_mapping_stride10
             # self.exp_out_path: exps/r_mapping_stride10/
+            """
+1. **저장할 결과 딕셔너리 준비**
+ - `objects`: 
+    객체 리스트로, `to_serializable()` 메서드를 사용해 직렬화 가능한 형태로 변환
+ - `cfg`: 
+    실험 설정 정보를 `cfg_to_dict(cfg)` 함수를 통해 딕셔너리로 변환
+ - `class_names`: 
+    객체 클래스 이름 배열로, `get_classes_arr()` 메서드를 통해 가져옴
+ - `class_colors`: 
+    객체 클래스의 색상 정보를 `get_class_color_dict_by_index()` 메서드를 통해 가져옴
+ - `edges`: 
+    객체 간 연결 정보를 직렬화 가능한 형태로 변환하여 포함시키며, `edges`가 제공되지 않은 경우 `None`으로 설정
+
+pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
+            """
             save_pointcloud(
                 exp_suffix=self.cfg.exp_suffix,
                 exp_out_path=self.exp_out_path,
@@ -878,17 +948,31 @@ camera_pose.shape: (4, 4)
                 edges=self.map_edges)
 
         if self.cfg.save_json:
+            """
+                {"object_1": {
+                    "id": 1,
+                    "object_tag": "stool",
+                    "object_caption": "",
+                    "bbox_extent": [ 0.65, 0.68, 0.47 ],
+                    "bbox_center": [ 1.8, 0.66, -1.23 ],
+                    "bbox_volume": 0.21 }, ...
+            """
+            # /room0/exps/r_mapping_stride10/obj_json_r_mapping_stride10.json
             save_obj_json(exp_suffix=self.cfg.exp_suffix,
                           exp_out_path=self.exp_out_path,
                           objects=self.objects)
 
+            # /room0/exps/r_mapping_stride10/edge_json_r_mapping_stride10.json
             save_edge_json(exp_suffix=self.cfg.exp_suffix,
                            exp_out_path=self.exp_out_path,
                            objects=self.objects,
                            edges=self.map_edges)
+        ##### 5.3. [끝]
 
-        # Save metadata if all frames are saved
+        ##### 5.4.[시작] 그 외(모든 프레임이 저장될 때 metadata, detection 결과 비디오) 저장하기
         if self.cfg.save_objects_all_frames:
+            # obj_all_frames_out_path:
+            # room0/exps/r_mapping_stride10/saved_obj_all_frames/det_s_detections_stride10/
             save_meta_path = self.obj_all_frames_out_path / f"meta.pkl.gz"
             with gzip.open(save_meta_path, "wb") as f:
                 pickle.dump(
@@ -903,7 +987,9 @@ camera_pose.shape: (4, 4)
 
         if self.run_detections:
             if self.cfg.save_video:
+                # "room0/exps/s_detections_stride10/vis_video.mp4"
                 save_video_detections(self.det_exp_path)
+        ##### 5.4. [끝]
 
     def _get_pose_data(self, time_msg: Time) -> Optional[np.ndarray]:
         try:

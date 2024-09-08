@@ -276,8 +276,7 @@ def get_sam_segmentation_dense(
         raise NotImplementedError
 
 
-def get_sam_mask_generator(variant: str,
-                           device) -> SamAutomaticMaskGenerator:
+def get_sam_mask_generator(variant: str, device) -> SamAutomaticMaskGenerator:
     if variant == "sam":
         sam = sam_model_registry[SAM_ENCODER_VERSION](
             checkpoint=SAM_CHECKPOINT_PATH)

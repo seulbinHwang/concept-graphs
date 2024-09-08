@@ -615,19 +615,13 @@ def handle_rerun_saving(use_rerun, save_rerun, exp_suffix, exp_out_path):
         # rerun_file_path:
         #   exps/r_mapping_stride10/rerun_r_mapping_stride10.rrd
         rerun_file_path = exp_out_path / f"rerun_{exp_suffix}.rrd"
-        print("Mapping done!")
-        print(
-            "If you want to save the rerun file, you should do so from the rerun viewer now."
-        )
-        print("You can't yet both save and log a file in rerun.")
-        print("If you do, make a pull request!")
-        print(
-            "Also, close the viewer before continuing, it frees up a lot of RAM, which helps for saving the pointclouds."
-        )
-        print(
-            f"Feel free to copy and use this path below, or choose your own:\n{rerun_file_path}"
-        )
-        input("Then press Enter to continue.")
+        print("매핑이 완료되었습니다!")
+        print("리런 뷰어에서 리런 파일을 저장하려면 지금 저장해야 합니다.")
+        print("현재 리런에서 파일을 저장하면서 동시에 로그를 기록하는 것은 불가능합니다.")
+        print("또한, 계속 진행하기 전에 뷰어를 닫아 주세요. "
+              "이 작업은 많은 RAM을 해제하여 포인트 클라우드를 저장하는 데 도움이 됩니다.")
+        print(f"아래의 경로를 복사하여 사용하거나 원하는 경로를 선택해도 됩니다:\n{rerun_file_path}")
+        input("그런 다음 계속하려면 Enter 키를 누르세요.")
 
 
 def measure_time(func):
@@ -981,15 +975,20 @@ def save_pointcloud(exp_suffix,
                     create_symlink=True,
                     edges=None):
     """
-    Saves the point cloud data to a .pkl.gz file. Optionally, creates or updates a symlink to the latest saved file.
+객체와 관련된 포인트 클라우드 데이터를 저장하고,
+    필요한 경우 최신 파일을 가리키는 심볼릭 링크를 생성 또는 업데이트
 
-    Args:
-    - exp_suffix (str): Suffix for the experiment, used in naming the saved file.
-    - exp_out_path (Path or str): Output path for the experiment's saved files.
-    - objects: The objects to save, assumed to have a `to_serializable()` method.
-    - obj_classes: The object classes, assumed to have `get_classes_arr()` and `get_class_color_dict_by_index()` methods.
-    - latest_pcd_filepath (Path or str, optional): Path for the symlink to the latest point cloud save. Default is None.
-    - create_symlink (bool): Whether to create/update a symlink to the latest save. Default is True.
+### 알고리즘 설명
+
+1. **저장할 결과 딕셔너리 준비**
+ - `objects`: 객체 리스트로, `to_serializable()` 메서드를 사용해 직렬화 가능한 형태로 변환
+ - `cfg`: 실험 설정 정보를 `cfg_to_dict(cfg)` 함수를 통해 딕셔너리로 변환
+ - `class_names`: 객체 클래스 이름 배열로, `get_classes_arr()` 메서드를 통해 가져옵니다.
+ - `class_colors`: 객체 클래스의 색상 정보를 `get_class_color_dict_by_index()` 메서드를 통해 가져옵니다.
+ - `edges`: 객체 간 연결 정보를 직렬화 가능한 형태로 변환하여 포함시키며, `edges`가 제공되지 않은 경우 `None`으로 설정
+
+2. **저장 경로 설정**
+   - 저장 경로는 `exp_out_path`와 `exp_suffix`를 결합하여 설정되며, `.pkl.gz` 형식으로 저장
     """
     print("saving map...")
     # Prepare the results dictionary
@@ -1047,6 +1046,28 @@ def find_existing_image_path(base_path, extensions):
 
 def save_objects_for_frame(obj_all_frames_out_path, frame_idx, objects,
                            obj_min_detections, adjusted_pose, color_path):
+    """
+이 코드는 주어진 프레임에서 객체 데이터에 대한 정보를 압축된 파일로 저장하는 과정
+이 과정은 특정 프레임에서 감지된 객체들을 처리하고, 나중에 다시 사용할 수 있도록 저장하는 데 목적
+
+### 알고리즘 설명
+     {obj_all_frames_out_path}/{frame_idx:06d}.pkl.gz # 파일을 압축하여 저장
+3. ** 객체 정보를 저장하기에 적합한 형태로 가공**
+   - 필터링된 객체 리스트 `filtered_objects`를 `MapObjectList` 형식으로 변환한 후,
+        시각화 및 저장 준비가 완료된 형태로 변환하는 `prepare_objects_save_vis` 함수를 호출하여
+        `prepared_objects`를 생성
+
+4. **저장할 데이터 구성**
+   - 최종적으로 저장할 데이터를 하나의 딕셔너리 형태로 구성
+     - `camera_pose`: 조정된 카메라의 위치 정보(`adjusted_pose`).
+     - `objects`: 필터링 및 준비된 객체 리스트(`prepared_objects`).
+     - `frame_idx`: 현재 프레임 인덱스(`frame_idx`).
+     - `num_objects`: 객체의 개수.
+     - `color_path`: 프레임에 대한 이미지 경로(`color_path`).
+
+5. **데이터 압축 및 저장**
+   -  `pickle`을 사용하여 데이터를 직렬화한 후, `gzip`으로 파일을 압축해 저장
+    """
     save_path = obj_all_frames_out_path / f"{frame_idx:06d}.pkl.gz"
     filtered_objects = [
         obj for obj in objects if obj['num_detections'] >= obj_min_detections

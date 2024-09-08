@@ -373,7 +373,7 @@ def merge_obj2_into_obj1(obj1,
                          device,
                          run_dbscan=True):
     '''
-    obj1: matched_obj
+    obj1: matched_obj ( 기존 객체 중에서)
     obj2: detected_obj
 
 ### 1. **주요 역할**
@@ -613,45 +613,42 @@ def compute_overlap_matrix_2set(objects_map: MapObjectList,
 def compute_overlap_matrix_general(objects_a: MapObjectList,
                                    objects_b=None,
                                    downsample_voxel_size=None) -> np.ndarray:
-    """
-    Compute the overlap matrix between two sets of objects represented by their point clouds. This function can also perform self-comparison when `objects_b` is not provided. The overlap is quantified based on the proximity of points from one object to the nearest points of another, within a threshold specified by `downsample_voxel_size`.
+    """ BBOX IOU로 겹치는 물체를 1차 거르고, pcd 기반으로 겹치는 정도(%)를 계산
+이 코드는 두 개의 객체 리스트(`objects_a`와 `objects_b`)에 대해 겹침 정도를 계산하는 알고리즘
+각 객체는 3D 포인트 클라우드(`pcd`)와 경계 상자(`bbox`)로 표현되며,
+객체 간의 포인트들이 얼마나 가까운지를 바탕으로 겹침 비율을 계산
 
-    Parameters
-    ----------
-    objects_a : MapObjectList
-        A list of object representations where each object contains a point cloud ('pcd') and bounding box ('bbox').
-        This is the primary set of objects for comparison.
+### 주요 개념 및 단계
 
-    objects_b : Optional[MapObjectList]
-        A second list of object representations similar to `objects_a`. If None, `objects_a` will be compared with itself to calculate self-overlap. Defaults to None.
+1. **초기화 및 입력 처리**
+   - `objects_a`는 비교할 객체 리스트이고, `objects_b`는 선택적으로 제공됩니다.
+   `objects_b`가 제공되지 않으면, **자기 비교(self-comparison)**를 수행합니다.
+   - `downsample_voxel_size` 내에 있는 포인트들만 겹치는 것으로 간주합니다.
 
-    downsample_voxel_size : Optional[float]
-        The threshold for determining whether points are close enough to be considered overlapping. Specifically, it's the square of the maximum distance allowed between points from two objects to consider those points as overlapping.
-        Must be provided; if None, a ValueError is raised.
+3. **포인트 클라우드 데이터 준비 및 FAISS 인덱스 생성**
+   - 각 객체의 포인트 클라우드 데이터를 NumPy 배열로 변환하여 `points_a` 리스트에 저장
+        그런 다음, 각 객체에 대해 FAISS 라이브러리의 `IndexFlatL2` 인덱스를 생성하여 **최근접 이웃(nearest neighbor)** 검색에 사용합니다.
+        - 이 인덱스는 L2(유클리드) 거리 기반의 최근접 이웃 검색을 빠르게 수행하기 위한 구조
+   - `objects_b`에 있는 객체들도 포인트 클라우드 데이터를 NumPy 배열로 변환하여 `points_b` 리스트에 저장
 
-    Returns
-    -------
-    np.ndarray
-        A 2D numpy array of shape (len(objects_a), len(objects_b)) containing the overlap ratios between objects.
-        The overlap ratio is defined as the fraction of points in the second object's point cloud that are within `downsample_voxel_size` distance to any point in the first object's point cloud.
+4. **경계 상자(3D Bounding Box) 겹침 계산**
+   - 결과로 `(m, n)` 크기의 IoU 행렬이 만들어지며,
+        이 값이 작으면 두 객체는 공간적으로 겹치지 않으므로
+        해당 객체 쌍에 대해 추가 계산을 하지 않고 건너뜁니다.
 
-    Raises
-    ------
-    ValueError
-        If `downsample_voxel_size` is not provided.
+5. **겹침 계산 (Overlap Matrix)**
+   - 각 객체 쌍 `(idx_a, idx_b)`에 대해 겹침을 계산합니다.
+        만약 자기 비교 모드일 때, 동일한 객체끼리 비교하지 않도록 제외합니다.
+   - 두 객체가 공간적으로 겹치지 않는 경우(`ious[idx_a, idx_b] < 1e-6`), 계산을 건너뜁니다.
+   - 겹침 계산은 `points_b[idx_b]`에 있는 각 포인트가 `points_a[idx_a]`의 포인트에 대해 가장 가까운 포인트까지의 거리를 계산합니다. 이를 위해 FAISS 인덱스를 활용하여 최근접 이웃 탐색을 수행합니다.
+        - 그 후, `downsample_voxel_size` 내에 있는 포인트들의 개수를 계산하여 두 객체 간의 포인트 겹침 비율을 구합니다.
+   - 이 값은 객체 간의 겹침 정도를 나타내며, 이를 최종적으로 `overlap_matrix[idx_a, idx_b]`에 저장합니다.
 
-    Notes
-    -----
-    The function uses the FAISS library for efficient nearest neighbor searches to compute the overlap.
-    Additionally, it employs a 3D IoU (Intersection over Union) computation for bounding boxes to quickly filter out pairs of objects without spatial overlap, improving performance.
-    - The overlap matrix helps identify potential duplicates or matches between new and existing objects based on spatial overlap.
-    - High values (e.g., >0.8) in the matrix suggest a significant overlap, potentially indicating duplicates or very close matches.
-    - Moderate values (e.g., 0.5-0.8) may indicate similar objects with partial overlap.
-    - Low values (<0.5) generally suggest distinct objects with minimal overlap.
-    - The choice of a "match" threshold depends on the application's requirements and may require adjusting based on observed outcomes.
+6. **결과 반환**
+   - 마지막으로 겹침 행렬 `overlap_matrix`를 반환합니다.
+   이 행렬의 각 요소는 객체 간의 겹침 비율을 나타내며, 높은 값일수록 두 객체가 많이 겹친다는 것을 의미
 
-    Examples
-    --------
+
     >>> objects_a = [{'pcd': pcd1, 'bbox': bbox1}, {'pcd': pcd2, 'bbox': bbox2}]
     >>> objects_b = [{'pcd': pcd3, 'bbox': bbox3}, {'pcd': pcd4, 'bbox': bbox4}]
     >>> downsample_voxel_size = 0.05
@@ -691,18 +688,6 @@ def compute_overlap_matrix_general(objects_a: MapObjectList,
 
     bbox_a = objects_a.get_stacked_values_torch('bbox')
     bbox_b = objects_b.get_stacked_values_torch('bbox')
-
-    # def compute_3d_iou_accurate_batch_safe(bbox1, bbox2):
-    #     try:
-    #         return compute_3d_iou_accurate_batch(bbox1, bbox2)
-    #     except ValueError as e:
-    #         if str(e) == "Plane vertices are not coplanar":
-    #             # Log the error or handle it in a way that's appropriate for your application
-    #             print("Non-coplanar boxes detected; returning zero IoU.")
-    #             return torch.zeros((bbox1.size(0), bbox2.size(0)))  # Return a zero IoU matrix
-    #         else:
-    #             raise  # Re-raise other unexpected exceptions
-    # ious = compute_3d_iou_accurate_batch_safe(bbox_a, bbox_b)
 
     ious = compute_3d_iou_accurate_batch(bbox_a, bbox_b)  # (m, n)
 
@@ -745,6 +730,36 @@ def merge_overlap_objects(
     device: str,
     map_edges=None,
 ):
+    """ 한줄요약: 거리 유사도 / 시각적 유사도가 모두 threshold를 넘으면 병합 -> 병합 시 , downsampling + dbscan으로 노이즈 제거
+이 코드는 객체 리스트에서 중복된 객체를 병합하는 알고리즘을 구현
+    병합은 겹침 비율(overlap ratio), 시각적 유사성(visual similarity), 그리고
+    텍스트 유사성(text similarity)을 기반으로 수행되며,
+이를 통해 중복된 객체를 통합하고 남은 객체들만을 반환
+
+### 알고리즘 설명
+
+#### 입력 데이터 초기화
+- `merge_overlap_thresh`, `merge_visual_sim_thresh`, `merge_text_sim_thresh`는
+    각각 객체를 병합할지 여부를 결정하는 겹침 비율, 시각적 유사성, 텍스트 유사성의 임계값
+- `overlap_matrix`는 객체들 간의 겹침 비율을 나타내는 행렬 (m x m)
+    - 행렬의 각 요소는 두 객체의 포인트 클라우드 겹침 정도를 나타냄
+- `dbscan_remove_noise`, `dbscan_eps`, `dbscan_min_points` 등의 DBSCAN 관련 파라미터는
+    - 병합 과정에서 노이즈 제거를 위한 클러스터링 옵션
+- `spatial_sim_type`, `device`, `map_edges`는 병합 시 고려해야 할 추가적인 정보를 전달
+
+#### 겹침 행렬에서 겹침 비율 추출 및 정렬
+- `overlap_matrix`에서 겹침이 있는 인덱스 쌍 `(x, y)`와 해당 겹침 비율 `overlap_ratio`를 추출합니다. 이때 `x`와 `y`는 겹치는 객체들의 인덱스입니다.
+- 겹침 비율을 내림차순으로 정렬하여 겹침 비율이 큰 객체들부터 처리되도록 설정합니다. 이 과정에서 `np.argsort(overlap_ratio)[::-1]`을 사용해 큰 겹침 비율을 우선 처리합니다.
+
+
+#### 병합 알고리즘:
+- 겹침 비율과 유사성 임계값을 기반으로 병합을 수행합니다. 겹침 비율이 `merge_overlap_thresh`보다 큰 경우, 병합 절차에 들어갑니다.
+- 시각적 유사성(visual similarity)은 코사인 유사성을 사용하여 두 객체의 시각적 표현(클립 피처, `clip_ft`) 간 유사도를 계산합니다.
+- 시각적 유사성(`visual_sim`)과 텍스트 유사성(`text_sim`)이 각각 지정된 임계값(`merge_visual_sim_thresh`, `merge_text_sim_thresh`)을 초과하면 병합이 가능합니다.
+- 만약 병합 조건이 충족되면, 객체 `i`는 객체 `j`에 병합됩니다. 이때, `merge_obj2_into_obj1` 함수가 호출되어 두 객체의 포인트 클라우드와 기타 정보를 통합합니다.
+- 병합 후, `kept_objects[i]`는 `False`로 설정되어 객체 `i`가 더 이상 유지되지 않음을 나타냅니다.
+
+    """
     x, y = overlap_matrix.nonzero()
     overlap_ratio = overlap_matrix[x, y]
 
@@ -768,11 +783,6 @@ def merge_overlap_objects(
                 to_tensor(objects[j]["clip_ft"]),
                 dim=0,
             )
-            # text_sim = F.cosine_similarity(
-            #     to_tensor(objects[i]["text_ft"]),
-            #     to_tensor(objects[j]["text_ft"]),
-            #     dim=0,
-            # )
             text_sim = visual_sim
             if (visual_sim
                     > merge_visual_sim_thresh) and (text_sim
@@ -906,20 +916,62 @@ def merge_objects(
     do_edges: bool = False,
     map_edges=None,
 ):
+    """ 거리 유사도 / 시각적 유사도가 모두 threshold를 넘으면 병합 -> 병합 시 , downsampling + dbscan으로 노이즈 제거
+
+
+
+### 병합 및 연결 관리 과정 요약
+2. **겹침 행렬 계산:**
+    객체 간의 겹침 비율을 계산하여 병합할 수 있는 후보군을 찾음
+3. **병합 수행:**
+    겹침 비율과 유사성을 기준으로 객체를 병합하고, 병합된 객체 리스트를 업데이트
+4. **연결 정보 업데이트(선택적):**
+    객체들 간의 연결 관계가 있을 경우, 병합 후 갱신된 인덱스 정보를 반영
+5. **최종 결과 반환:**
+    병합된 객체 리스트(및 연결 정보)를 반환
+
+이 코드는 객체 병합을 수행하는 고차 함수로, 객체 리스트에서 중복된 객체를 찾고 병합하는 과정을 자동화
+병합 조건은 객체 간의 **겹침 비율(overlap ratio)**, **시각적 유사성(visual similarity)**,
+    **텍스트 유사성(text similarity)**을 기준으로 결정됩니다.
+추가적으로, 병합된 객체 리스트를 업데이트하거나 연결 정보(`edges`)를 관리하는 옵션도 제공합니다.
+
+### 알고리즘 설명
+
+2. **겹침 행렬 계산**
+   - `compute_overlap_matrix_general` 함수를 호출
+3. **겹침에 기반한 병합 수행**
+   - `merge_overlap_objects` 함수는 겹침 행렬과 시각적, 텍스트 유사성 임계값을 사용하여 객체들 간의 병합을 수행
+   - 구체적으로, 객체 간의 겹침 비율이 주어진 임계값(`merge_overlap_thresh`)을 초과하면
+        - 해당 객체들에 대해 시각적 및 텍스트 유사성 검사를 추가로 수행하여 병합 여부를 결정
+   - 병합 작업은 겹침 비율이 높은 순서대로 진행되며, 병합된 객체는 리스트에서 제거되고 나머지 객체들이 업데이트
+   - 병합 작업이 완료된 후에는 업데이트된 객체 리스트와 병합된 객체의 인덱스 정보를 반환
+
+4. **연결 정보(Edges) 업데이트 (선택적)**
+   - 만약 `do_edges`가 `True`로 설정되어 있으면,
+        `map_edges.merge_update_indices(index_updates)`를 통해 병합된 객체들의 인덱스 정보를 `map_edges`에 반영
+   - 그런 다음, `map_edges.update_objects_list(objects)`로 병합된 새로운 객체 리스트를 `map_edges`에 업데이트
+   - 이 과정은 객체들 간의 연결 관계(연결 정보)를 유지하거나 갱신하는 데 사용
+
+5. **최종 반환**
+   - 만약 `do_edges`가 `True`인 경우, 병합된 객체 리스트와 갱신된 `map_edges` 객체를 함께 반환
+   - 그렇지 않은 경우, 병합된 객체 리스트만 반환
+    """
     if len(objects) == 0:
         return objects
     if merge_overlap_thresh <= 0:
         return objects
 
     # Assuming compute_overlap_matrix requires only `objects` and `downsample_voxel_size`
+    # BBOX IOU로 겹치는 물체를 1차 거르고, pcd 기반으로 겹치는 정도(%)를 계산
+    # overlap_matrix: (m, m) matrix
     overlap_matrix = compute_overlap_matrix_general(
         objects_a=objects,
         objects_b=None,
         downsample_voxel_size=downsample_voxel_size,
     )
     print("Before merging:", len(objects))
-    # old_objects = copy.deepcopy(objects)
-    # Pass all necessary configuration parameters to merge_overlap_objects
+    # merge_overlap_objects:
+    # 거리 유사도 / 시각적 유사도가 모두 threshold를 넘으면 병합 -> 병합 시 , downsampling + dbscan으로 노이즈 제거
     objects, index_updates = merge_overlap_objects(
         merge_overlap_thresh=merge_overlap_thresh,
         merge_visual_sim_thresh=merge_visual_sim_thresh,
@@ -935,32 +987,10 @@ def merge_objects(
         map_edges=map_edges,
     )
 
-    # print(f"MERGE OPERATIONS: \n{merge_operations}")
-
-    # print("MERGE OPERATIONS: ")
-    # for oper in merge_operations:
-    #     obj_1_curr_num = old_objects[oper[0]]['curr_obj_num']
-    #     obj_2_curr_num = old_objects[oper[1]]['curr_obj_num']
-    #     print(f"Merge {obj_1_curr_num} into {obj_2_curr_num}")
-
-    # k=1
-    # for i, j in zip(list(range(len(old_objects))), index_updates):
-    #     print(i,j)
-
-    # if map_edges is not None:
     if do_edges:
         map_edges.merge_update_indices(index_updates)
         map_edges.update_objects_list(objects)
         print("After merging:", len(objects))
-
-    # if map_edges is not None:
-    #     # Apply each recorded merge operation to the edges
-    #     for source_idx, dest_idx in merge_operations:
-    #         map_edges.merge_objects_edges(source_idx, dest_idx)
-    #     map_edges.update_objects_list(objects)
-    #     print("After merging:", len(objects))
-
-    # now update all the edge indices using the index_updates, how?
 
     if do_edges:
         return objects, map_edges
@@ -1326,7 +1356,8 @@ def transform_detection_list(
 
 # @profile
 def make_detection_list_from_pcd_and_gobs(obj_pcds_and_bboxes, gobs, color_path,
-                                          obj_classes, image_idx):
+                                          obj_classes,
+                                          image_idx) -> DetectionList:
     """
     **3D 포인트 클라우드**와 **Grounded Observations (gobs)** 입력 데이터를 사용해
     **객체 감지 리스트**를 생성하는 역할을 합니다.
@@ -1545,14 +1576,10 @@ def detections_to_obj_pcd_and_bbox(depth_array,
     """
 위 함수는 3D 객체 감지 결과를 처리하여,
     - 각 객체의 3D 포인트 클라우드(Point Cloud)와 경계 상자(Bounding Box)를 생성
-- 이 함수는 주어진 깊이 이미지, 객체 마스크, 그리고 카메라 내장행렬을 사용하여
-    - 각 객체의 3D 위치와 모양을 계산
 
 ### 주요 역할과 기능:
 
 2. **텐서 변환 및 장치 할당**:
-   - 입력 데이터를 PyTorch 텐서로 변환하고, 지정된 장치(`cuda` 또는 `cpu`)로 이동시킵니다.
-
 3. **포인트 클라우드 생성**:
    - `batch_mask_depth_to_points_colors` 함수를 호출하여,
         - 마스크와 깊이 정보를 기반으로 3D 포인트 및 색상(선택 사항)을 계산
@@ -1561,8 +1588,7 @@ def detections_to_obj_pcd_and_bbox(depth_array,
 
 4. **포인트 클라우드 다운샘플링**:
    - `dynamic_downsample` 함수를 사용하여,
-        - 포인트 클라우드를 지정된 최대 포인트 수(`obj_pcd_max_points`)로 줄입니다.
-   - 이 과정에서 포인트 클라우드의 밀도를 낮추어 메모리 사용을 줄이고, 처리 속도를 높입니다.
+        - 포인트 클라우드를 지정된 최대 포인트 수(`obj_pcd_max_points`)로 줄임
 
 5. **포인트 클라우드 생성 및 변환**:
    - Open3D의 `PointCloud` 객체를 생성하고, 계산된 3D 포인트와 색상을 할당
@@ -1570,19 +1596,9 @@ def detections_to_obj_pcd_and_bbox(depth_array,
 
 6. **경계 상자(Bounding Box) 계산**:
    - `get_bounding_box` 함수를 호출하여, 포인트 클라우드를 감싸는 경계 상자를 계산
-   - 이때, `spatial_sim_type`에 따라 경계 상자의 유형을 선택할 수 있습니다
-        - (예: axis-aligned, 즉 축 정렬된 상자).
+7. 필터링
+    - 포인트 클라우드가 유효하지 않거나, 경계 상자의 부피가 너무 작은 객체는 제외
 
-7. **결과 저장 및 반환**:
-   - 각 객체의 포인트 클라우드와 경계 상자를 `processed_objects` 리스트에 저장
-        - 포인트 클라우드가 유효하지 않거나, 경계 상자의 부피가 너무 작은 객체는 제외
-   - 최종적으로, 모든 처리된 객체의 리스트를 반환
-
-- **출력**:
-  - 각 객체에 대해 포인트 클라우드(`pcd`)와 경계 상자(`bbox`)가 포함된 딕셔너리 리스트를 반환
-    """
-    """
-    This function processes a batch of objects to create colored point clouds, apply transformations, and compute bounding boxes.
 
     Args:
         depth_array (numpy.ndarray): (680, 1200)
@@ -1594,8 +1610,6 @@ def detections_to_obj_pcd_and_bbox(depth_array,
         spatial_sim_type (str, optional): Type of spatial similarity. Defaults to 'axis_aligned'.
         device (str, optional): Device to use. Defaults to 'cuda'.
 
-    Returns:
-        list: List of dictionaries containing processed objects. Each dictionary contains a point cloud and a bounding box.
     """
     N, H, W = masks.shape
 
