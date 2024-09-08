@@ -19,7 +19,7 @@ import scipy.ndimage as ndi
 import torch
 from PIL import Image
 from tqdm import trange
-from open3d.io import read_pinhole_camera_parameters
+# from open3d.io import read_pinhole_camera_parameters
 import hydra
 from omegaconf import DictConfig
 import open_clip
@@ -131,16 +131,16 @@ def main(cfg: DictConfig):
     objects = MapObjectList(device=cfg.device)
     map_edges = MapEdgeMapping(objects)
 
-    # For visualization
-    if cfg.vis_render:
-        # render a frame, if needed (not really used anymore since rerun)
-        view_param = read_pinhole_camera_parameters(cfg.render_camera_path)
-        obj_renderer = OnlineObjectRenderer(
-            view_param=view_param,
-            base_objects=None,
-            gray_map=False,
-        )
-        frames = []
+    # # For visualization
+    # if cfg.vis_render:
+    #     # render a frame, if needed (not really used anymore since rerun)
+    #     view_param = read_pinhole_camera_parameters(cfg.render_camera_path)
+    #     obj_renderer = OnlineObjectRenderer(
+    #         view_param=view_param,
+    #         base_objects=None,
+    #         gray_map=False,
+    #     )
+    #     frames = []
     # output folder for this mapping experiment
     # dataset_root: Datasets
     # scene_id: Replica/room0
