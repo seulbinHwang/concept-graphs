@@ -123,7 +123,7 @@ class RealtimeHumanSegmenterNode(Node):
         exp_path = "./Datasets/Replica/room0/exps"
         if os.path.exists(exp_path):
             user_input = input(
-                f"The folder {exp_path} already exists. Do you want to delete it? (Y/N): ").strip().lower()
+                f"The folder {exp_path} already exists. Do you want to delete it? (y/n): ").strip().lower()
 
             if user_input == 'y':
                 # 폴더 삭제
