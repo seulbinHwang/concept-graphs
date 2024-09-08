@@ -354,7 +354,7 @@ def get_bounding_box(
     if ("accurate" in spatial_sim_type or
             "overlap" in spatial_sim_type) and len(pcd.points) >= 4:
         try:
-            return pcd.get_oriented_bounding_box()  #(robust=True)
+            return pcd.get_oriented_bounding_box(robust=True)
         except RuntimeError as e:
             print(f"Met {e}, use axis aligned bounding box instead")
             return pcd.get_axis_aligned_bounding_box()
