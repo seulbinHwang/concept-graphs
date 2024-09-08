@@ -47,7 +47,7 @@ contain_mismatch_penalty: 0.5
 # Selection criteria on the 2D masks
 mask_area_threshold: 25 # mask with pixel area less than this will be skipped
 mask_conf_threshold: 0.25 # mask with lower confidence score will be skipped
-max_bbox_area_ratio: 0.5 # boxes with larger areas than this will be skipped
+max_bbox_area_ratio: 1.0 # boxes with larger areas than this will be skipped
 
 min_points_threshold: 16 # projected and sampled pcd with less points will be skipped
 
