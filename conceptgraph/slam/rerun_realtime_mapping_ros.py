@@ -5,7 +5,7 @@ The script is used to model Grounded SAM detections in 3D, it assumes the tag2te
 # Standard library imports
 import os
 import copy
-import uuid
+import shutil
 import time
 from pathlib import Path
 import pickle
@@ -120,6 +120,21 @@ class RealtimeHumanSegmenterNode(Node):
         # scene_id: Replica/room0
         # exp_suffix: r_mapping_stride10
         # self.exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
+        exp_path = "./Datasets/Replica/room0/exps"
+        if os.path.exists(exp_path):
+            user_input = input(
+                f"The folder {exp_path} already exists. Do you want to delete it? (Y/N): ").strip().lower()
+
+            if user_input == 'y':
+                # 폴더 삭제
+                shutil.rmtree(exp_path)
+                print(f"The folder {exp_path} has been deleted.")
+            else:
+                print("The folder has not been deleted.")
+
+
+
+
         self.exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
                                              cfg.exp_suffix)
 
