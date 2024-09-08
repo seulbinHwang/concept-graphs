@@ -259,8 +259,8 @@ def orr_log_objs_pcd_and_bbox(objects, obj_classes):
 
         # Assuming bbox is extracted as before
         bbox = obj['bbox']
-        centers = [bbox.center]
-        half_sizes = [bbox.extent / 2]
+        centers = [bbox.get_center()]
+        half_sizes = [bbox.get_extent() / 2]
         # Convert rotation matrix to quaternion
         bbox_quaternion = [rotation_matrix_to_quaternion(bbox.R)]
 
