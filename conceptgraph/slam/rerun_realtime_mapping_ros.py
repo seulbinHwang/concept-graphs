@@ -454,12 +454,18 @@ class RealtimeHumanSegmenterNode(Node):
 ]
             """
             labels, edges, _, captions = make_vlm_edges_and_captions(
-                rgb_array, curr_det, self.obj_classes, detection_class_labels,
-                self.det_exp_vis_path, color_path, self.cfg.make_edges,
-                self.openai_client, self.frame_idx, save_result = True)
+                rgb_array,
+                curr_det,
+                self.obj_classes,
+                detection_class_labels,
+                self.det_exp_vis_path,
+                color_path,
+                self.cfg.make_edges,
+                self.openai_client,
+                self.frame_idx,
+                save_result=True)
             # TODO: 더비겅이 완료된 후엔, save_result = False로 해야함.
             ##### 1.2. [끝]
-
             """
         image_crops: List[Image.Image]
             - 잘라낸 이미지들의 리스트 (길이: N)
@@ -743,7 +749,7 @@ camera_pose.shape: (4, 4)
             if temp_class_name != most_common_class_name:
                 obj["class_name"] = most_common_class_name
 
-        ##### 3.2. [끝] 기존 object들과 융합하기
+        ##### 3.1. [끝] 기존 object들과 융합하기
 
         ##### 3.2. [시작] edge 계산하기
         if self.cfg["make_edges"]:
@@ -831,11 +837,6 @@ camera_pose.shape: (4, 4)
         orr_log_edges(self.objects, self.map_edges, self.obj_classes)
 
         ##### 4.1. [끝] 주기적 "누적 object" 후처리
-        if not RUN_AFTER:
-            print(
-                "\n\n\n\n\n RUN_AFTER RUN_AFTER RUN_AFTER RUN_AFTER RUN_AFTER  is False"
-            )
-            return
 
         ##### 4.2. [시작] 매 frame 마다 object 결과 저장 (사용하면 매번 저장)
         if self.cfg.save_objects_all_frames:
@@ -910,11 +911,11 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
         #   exps/r_mapping_stride10/rerun_r_mapping_stride10.rrd
         # PRINT 문만 띄어주는 역할
         ##### 5.2. [시작] rerun 결과 저장하기
-        handle_rerun_saving(
-            self.cfg.use_rerun,
-            self.cfg.save_rerun,  # True
-            self.cfg.exp_suffix,
-            self.exp_out_path)
+        # handle_rerun_saving(
+        #     self.cfg.use_rerun,
+        #     self.cfg.save_rerun,  # True
+        #     self.cfg.exp_suffix,
+        #     self.exp_out_path)
         ##### 5.2. [끝]
 
         ##### 5.3. [시작] save_pcd / object.json , edge.json (save_json)

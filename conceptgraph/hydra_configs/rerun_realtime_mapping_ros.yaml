@@ -18,7 +18,7 @@ make_edges: !!bool False
 stride: 50 # 10
 exp_suffix: r_mapping_stride10 # helpful label to identify your mapping experiment
 
-save_video: !!bool False
+save_video: !!bool True
 save_objects_all_frames: !!bool False
 
 downsample_voxel_size: 0.01

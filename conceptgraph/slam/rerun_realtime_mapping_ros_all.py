@@ -743,7 +743,7 @@ camera_pose.shape: (4, 4)
             if temp_class_name != most_common_class_name:
                 obj["class_name"] = most_common_class_name
 
-        ##### 3.2. [끝] 기존 object들과 융합하기
+        ##### 3.1. [끝] 기존 object들과 융합하기
 
         ##### 3.2. [시작] edge 계산하기
         if self.cfg["make_edges"]:

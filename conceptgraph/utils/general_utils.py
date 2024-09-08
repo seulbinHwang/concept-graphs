@@ -600,14 +600,13 @@ def make_vlm_edges_and_captions(image,
                 save_path = vis_save_path_for_vlm_edges
             else:
                 save_path = None
-            edge_image = plot_edges_from_vlm(
-                annotated_image_for_vlm,
-                edges,
-                filtered_detections,
-                obj_classes,
-                labels,
-                sorted_indices,
-                save_path=save_path)
+            edge_image = plot_edges_from_vlm(annotated_image_for_vlm,
+                                             edges,
+                                             filtered_detections,
+                                             obj_classes,
+                                             labels,
+                                             sorted_indices,
+                                             save_path=save_path)
     # labels: detection_class_labels가 필터링된 것: ["sofa chair 0", ...]
     return labels, edges, edge_image, captions
 
