@@ -356,6 +356,12 @@ def get_bounding_box(
         try:
             return pcd.get_oriented_bounding_box(robust=True)
         except RuntimeError as e:
+            raise RuntimeError(
+                f"Failed to get oriented bounding box: {e}. OrientedBoundingBox 인 경우와"
+                f"AxisAlignedBoundingBox 인 경우 모두 코드가 동작하도록 "
+                f"conceptgraph/utils/optional_rerun_wrapper.py 파일을 수정해주세요."
+                f"(bbox.center 같은.) 많은 디버깅이 필요할 수 있습니다."
+            )
             print(f"Met {e}, use axis aligned bounding box instead")
             return pcd.get_axis_aligned_bounding_box()
     else:

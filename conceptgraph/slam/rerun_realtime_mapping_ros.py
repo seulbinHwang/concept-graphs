@@ -1132,7 +1132,6 @@ def main(cfg: DictConfig):
         traceback.print_exc()
         if ros2_bridge is not None:
             ros2_bridge.wrap_up()
-            ros2_bridge.vis.destroy_window()
             ros2_bridge.destroy_node()
             rclpy.shutdown()
 
