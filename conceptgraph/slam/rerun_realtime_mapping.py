@@ -722,24 +722,24 @@ adjusted_pose.shape: (4, 4)
                                    cfg.obj_min_detections, adjusted_pose,
                                    color_path)
 
-        if cfg.vis_render:  # False
-            # render a frame, if needed (not really used anymore since rerun)
-            vis_render_image(
-                objects,
-                obj_classes,
-                obj_renderer,
-                image_original_pil,
-                adjusted_pose,
-                frames,
-                frame_idx,
-                color_path,
-                cfg.obj_min_detections,
-                cfg.class_agnostic,
-                cfg.debug_render,
-                is_final_frame,
-                cfg.exp_out_path,
-                cfg.exp_suffix,
-            )
+        # if cfg.vis_render:  # False
+        #     # render a frame, if needed (not really used anymore since rerun)
+        #     vis_render_image(
+        #         objects,
+        #         obj_classes,
+        #         obj_renderer,
+        #         image_original_pil,
+        #         adjusted_pose,
+        #         frames,
+        #         frame_idx,
+        #         color_path,
+        #         cfg.obj_min_detections,
+        #         cfg.class_agnostic,
+        #         cfg.debug_render,
+        #         is_final_frame,
+        #         cfg.exp_out_path,
+        #         cfg.exp_suffix,
+        #     )
         # periodically_save_pcd: False
         if cfg.periodically_save_pcd and (
                 counter % cfg.periodically_save_pcd_interval == 0):

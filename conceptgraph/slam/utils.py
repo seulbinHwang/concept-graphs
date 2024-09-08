@@ -995,7 +995,7 @@ def merge_objects(
     if do_edges:
         return objects, map_edges
     else:
-        return objects
+        return objects, map_edges
 
 
 def filter_captions(captions, detection_class_labels):
