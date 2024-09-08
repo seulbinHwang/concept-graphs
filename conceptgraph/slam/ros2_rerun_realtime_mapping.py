@@ -1070,7 +1070,7 @@ self.depth_dist_coeffs: [          0           0           0           0        
 
 @hydra.main(version_base=None,
             config_path="../hydra_configs/",
-            config_name="rerun_realtime_mapping")
+            config_name="rerun_realtime_mapping2")
 def main(cfg: DictConfig):
 
     parser = argparse.ArgumentParser(
