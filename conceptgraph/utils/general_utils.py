@@ -525,7 +525,7 @@ def make_vlm_edges_and_captions(image,
   - IoU가 80% 이상 겹치면, 신뢰도가 낮은 객체를 제거
   - bg_classes 클래스 제거
     """
-    # labels: detection_class_labels가 필터링된 것: ["sofa chair 0", ...]
+    # labels: detection_class_labels 가 필터링된 것: ["sofa chair 0", ...]
     if curr_det.xyxy.shape[0] == 0:
         filtered_detections = curr_det
         labels = detection_class_labels
@@ -555,32 +555,32 @@ def make_vlm_edges_and_captions(image,
         if save_result:
             cv2.imwrite(str(vis_save_path_for_vlm), image)
         return labels, edges, edge_image, captions
+    """ annotate_for_vlm
+    이미지 위에 탐지된 객체들의 위치와 라벨을 오버레이(overlay)하는 방식으로 이루어짐
+    객체에 부여된 라벨들은 숫자와 함께 고유하게 표시되며, 
+        이를 OpenAI API에서 객체 관계를 파악하는 데 사용됨
+    """
+    annotated_image_for_vlm, sorted_indices = annotate_for_vlm(
+        image,
+        filtered_detections,
+        obj_classes,
+        labels,
+        save_path=vis_save_path_for_vlm)
+    if save_result:
+        cv2.imwrite(str(vis_save_path_for_vlm), annotated_image_for_vlm)
+        print(f"Line 313, vis_save_path_for_vlm: {vis_save_path_for_vlm}")
     if make_edges_flag:
         # vis_save_path_for_vlm_edges
         # room0/exps/s_detections_stride10/vis/frame000000annotated_for_vlm_w_edges.jpg
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
             det_exp_vis_path, color_path, frame_idx, w_edges=True)
-        """ annotate_for_vlm
-        이미지 위에 탐지된 객체들의 위치와 라벨을 오버레이(overlay)하는 방식으로 이루어짐
-        객체에 부여된 라벨들은 숫자와 함께 고유하게 표시되며, 
-            이를 OpenAI API에서 객체 관계를 파악하는 데 사용됨
-        """
-        annotated_image_for_vlm, sorted_indices = annotate_for_vlm(
-            image,
-            filtered_detections,
-            obj_classes,
-            labels,
-            save_path=vis_save_path_for_vlm)
-
         label_list = []
         for label in labels:
             label_num = str(label.split(" ")[-1])
             label_name = re.sub(r'\s*\d+$', '', label).strip()
             full_label = f"{label_num}: {label_name}"
             label_list.append(full_label)
-        if save_result:
-            cv2.imwrite(str(vis_save_path_for_vlm), annotated_image_for_vlm)
-        print(f"Line 313, vis_save_path_for_vlm: {vis_save_path_for_vlm}")
+
         if openai_client:
             # object들에 대한 관계 파악
             # edges = [("1", "on top of", "2"), ("3", "under", "2"), ...]

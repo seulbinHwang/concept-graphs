@@ -100,7 +100,7 @@ class RealtimeHumanSegmenterNode(Node):
         super().__init__('ros2_bridge')
         self.cfg = cfg
         self.args = args
-        self._target_frame = "odom"  #"vl"
+        self._target_frame = "vl"  #"vl"
         self._source_frame = "base_link"
 
         # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
@@ -337,7 +337,9 @@ class RealtimeHumanSegmenterNode(Node):
             return
 
         rgb_array, rgb_builtin_time = self.rgb_callback(rgb_msg)
+        print(f"rgb_array: {rgb_array.shape}")
         depth_array, depth_builtin_time = self.depth_callback(depth_msg)
+        print(f"depth_array: {depth_array.shape}")
         agent_pose = self._get_pose_data(depth_builtin_time)
         if agent_pose is None:
             return
@@ -365,6 +367,7 @@ class RealtimeHumanSegmenterNode(Node):
         # CHECK: 내가 수정했음
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
             self.det_exp_vis_path, color_path, frame_idx=self.frame_idx)
+        print("vis_save_path_for_vlm:", vis_save_path_for_vlm)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
             self.det_exp_vis_path,
             color_path,
@@ -377,11 +380,15 @@ class RealtimeHumanSegmenterNode(Node):
             confidences = results[0].boxes.conf.cpu().numpy()
             detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
                 int)  # (N,)
+
             # detection_class_labels = [ "sofa chair 0", ... ]
             detection_class_labels = [
                 f"{self.obj_classes.get_classes_arr()[class_id]} {class_idx}"
                 for class_idx, class_id in enumerate(detection_class_ids)
             ]
+            object_number = len(detection_class_ids)
+            print("object_number:", object_number)
+            print("detection_class_labels:", detection_class_labels)
             # 원본 size 기준으로 xyxy 가 나온다는 것을 확인함
             xyxy_tensor = results[0].boxes.xyxy
             xyxy_np = xyxy_tensor.cpu().numpy()  # (N, 4)
@@ -1013,7 +1020,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
                 time=time_msg,
-                timeout=rclpy.duration.Duration(seconds=0.3))
+                timeout=rclpy.duration.Duration(seconds=0.6))
             agent_pose = self._transform_stamped_to_matrix(vl_transform)
 
             return agent_pose
