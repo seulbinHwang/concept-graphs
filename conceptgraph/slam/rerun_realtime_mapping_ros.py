@@ -94,8 +94,30 @@ import numpy as np
 from sensor_msgs.msg import Image
 from realsense2_camera_msgs.msg import RGBD
 from cv_bridge import CvBridge
+"""
+ros2 bag record -o 09112312 /odom /odom_wio /robot0/realsense0/aligned_depth_to_color/camera_info /robot0/realsense0/aligned_depth_to_color/image_raw /robot0/realsense0/color/camera_info /robot0/realsense0/color/image_raw /robot0/realsense0/color/metadata /robot0/realsense0/depth/camera_info /robot0/realsense0/depth/image_rect_raw /robot0/realsense0/depth/metadata /robot0/realsense0/extrinsics/depth_to_color /robot0/realsense0/rgbd /tf /tf_static  /vl /vl/opt /vl/opt/pose_with_covariance /vl/pose_with_covariance
 
+ros2 bag record -o 09112321 /odom /odom_wio  /robot0/realsense0/extrinsics/depth_to_color /robot0/realsense0/rgbd /tf /tf_static  /vl /vl/opt /vl/opt/pose_with_covariance /vl/pose_with_covariance
 
+"""
+"""
+ros2 launch realsense2_camera rs_launch.py \
+camera_namespace:=robot0 camera_name:=realsense0 \
+depth_module.depth_profile:=640x480x30 \
+rgb_camera.color_profile:=640x480x30 \
+depth_module.depth_format:=Z16 \
+rgb_camera.color_format:=RGB8 \
+enable_color:=true \
+enable_depth:=true \
+enable_rgbd:=true \
+enable_sync:=true \
+align_depth.enable:=true \
+serial_no:=_034422070213 \
+reconnect_timeout:=10.0 \
+wait_for_device_timeout:=60.0 \
+initial_reset:=true \
+clip_distance:=4.0
+"""
 class RealtimeHumanSegmenterNode(Node):
 
     def __init__(self, cfg: DictConfig, args: argparse.Namespace):
@@ -225,6 +247,11 @@ class RealtimeHumanSegmenterNode(Node):
         self.depth_image: Optional[np.ndarray] = None
         self.builtin_time = None
 
+
+        self.color_camera_matrix = None
+        self.color_dist_coeffs = None
+        self.intrinsics = None
+        self.depth_dist_coeffs = None
         self.subscription = self.create_subscription(
             RGBD,
             '/robot0/realsense0/rgbd',  # 토픽 이름을 launch 파일에 맞게 수정
@@ -243,6 +270,10 @@ class RealtimeHumanSegmenterNode(Node):
             msg.depth, "16UC1") / 1000  # Assuming 16-bit depth
         # Print the maximum depth value
         builtin_time = msg.header.stamp
+        color_camera_info = msg.rgb_camera_info
+        self.color_camera_matrix, self.color_dist_coeffs = self.color_camera_info_callback(color_camera_info)
+        depth_camera_info = msg.depth_camera_info
+        self.intrinsics, self.depth_dist_coeffs = self.depth_camera_info_callback(depth_camera_info)
         self.core_logic(rgb_image, depth_image, builtin_time)
 
     def convert_image_to_np(self, img_msg: Image, encoding: str) -> np.ndarray:
@@ -289,7 +320,6 @@ class RealtimeHumanSegmenterNode(Node):
     def _set_rgbd_info_subscribers(self):
         color_camera_info_topic_name = \
             f"realsense{self.args.realsense_idx}/color_camera_info"
-        self.rgb_intrinsics = self.rgb_dist_coeffs = None
         self.color_camera_info_sub = self.create_subscription(
             CameraInfo, color_camera_info_topic_name,
             self.color_camera_info_callback, 10)
@@ -380,17 +410,20 @@ class RealtimeHumanSegmenterNode(Node):
         print(f"depth_array: {depth_array.shape}")
         self.core_logic(rgb_array, depth_array, depth_builtin_time)
 
+
     def core_logic(self, rgb_array: np.ndarray, depth_array: np.ndarray,
                    depth_builtin_time: Time):
         color_path = None
         #### 1. frame 처리
         self.frame_idx += 1
-        if self.intrinsics is None:
-            return
-        agent_pose = self._get_pose_data(depth_builtin_time)
-        if agent_pose is None:
-            return
-        camera_pose = agent_pose @ self.extrinsic
+        TEST = False
+        if not TEST:
+            if self.intrinsics is None:
+                return
+            agent_pose = self._get_pose_data(depth_builtin_time)
+            if agent_pose is None:
+                return
+            camera_pose = agent_pose @ self.extrinsic
         self.tracker.curr_frame_idx = self.frame_idx
         self.counter += 1
         self.orr.set_time_sequence("frame", self.frame_idx)
@@ -626,7 +659,6 @@ class RealtimeHumanSegmenterNode(Node):
 특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
     "이전 프레임의 카메라 위치"와 "현재 프레임의 카메라 위치"를 연결하는 경로를 시각적으로 나타냄
         """
-        return
         self.prev_adjusted_pose = orr_log_camera(self.intrinsics, camera_pose,
                                                  self.prev_adjusted_pose,
                                                  self.cfg.image_width,
@@ -1104,8 +1136,6 @@ self.rgb_intrinsics: [[     301.56           0      214.37]
 self.rgb_dist_coeffs: [          0           0           0           0           0]
 
         """
-        self.rgb_intrinsics = camera_matrix
-        self.rgb_dist_coeffs = dist_coeffs
         return camera_matrix, dist_coeffs
 
     def depth_camera_info_callback(
