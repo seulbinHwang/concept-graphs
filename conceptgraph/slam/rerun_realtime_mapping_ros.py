@@ -270,6 +270,8 @@ class RealtimeHumanSegmenterNode(Node):
             msg.depth, "16UC1") / 1000  # Assuming 16-bit depth
         # Print the maximum depth value
         builtin_time = msg.header.stamp
+        time_sec = builtin_time.sec + builtin_time.nanosec * 1e-9
+        print(f"RGBD message received at time: {time_sec}")
         color_camera_info = msg.rgb_camera_info
         self.color_camera_matrix, self.color_dist_coeffs = self.color_camera_info_callback(color_camera_info)
         depth_camera_info = msg.depth_camera_info
@@ -332,6 +334,21 @@ class RealtimeHumanSegmenterNode(Node):
             self.depth_camera_info_callback, 10)
 
     def _set_extrinsic(self) -> np.ndarray:
+        axis_transpose_matrix = np.array([[0., 0., 1., 0.], [-1., 0., 0., 0.],
+                                          [0., -1., 0., 0.], [0., 0., 0., 1.]])
+        camera_translation = np.array([0.37, 0.035, 0.862])
+        camera_radian_rotation = np.deg2rad(np.array([0., 0., 0.]))
+        rotation = R.from_euler('xyz', camera_radian_rotation)
+        rotation_matrix_3 = rotation.as_matrix()
+        rotation_matrix = np.eye(4)
+        rotation_matrix[:3, :3] = rotation_matrix_3
+        translation_matrix = tf_transformations.translation_matrix(
+            camera_translation)
+        (camera_pose_wrt_agent
+        ) = translation_matrix @ rotation_matrix @ axis_transpose_matrix
+        return camera_pose_wrt_agent
+
+    def _set_extrinsic_prev(self) -> np.ndarray:
         axis_transpose_matrix = np.array([[0., -1., 0., 0.], [0., 0., -1., 0.],
                                           [1., 0., 0., 0.], [0., 0., 0., 1.]])
         if self.args.realsense_idx == 0:  # 로봇 정면 기준 왼쪽 카메라 (+y)
@@ -578,7 +595,7 @@ class RealtimeHumanSegmenterNode(Node):
             """
             if curr_det.xyxy.shape[0] == 0:
                 print("No detections found in the image")
-                # self.prev_adjusted_pose = camera_pose
+                self.prev_adjusted_pose = camera_pose
                 return
             ##### 1.3. [시작] 개별 objects에 대한 CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
@@ -1100,7 +1117,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
                 time=time_msg,
-                timeout=rclpy.duration.Duration(seconds=0.6))
+                timeout=rclpy.duration.Duration(seconds=1.5))
             agent_pose = self._transform_stamped_to_matrix(vl_transform)
 
             return agent_pose
