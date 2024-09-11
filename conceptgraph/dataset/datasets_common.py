@@ -101,14 +101,14 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         end: Optional[int] = -1,
         desired_height: int = 480,
         desired_width: int = 640,
-        channels_first: bool = False, #####
-        normalize_color: bool = False, #####
-        device="cuda:0", #####
-        dtype=torch.float, #####
+        channels_first: bool = False,  #####
+        normalize_color: bool = False,  #####
+        device="cuda:0",  #####
+        dtype=torch.float,  #####
         load_embeddings: bool = False,
         embedding_dir: str = "feat_lseg_240_320",
         embedding_dim: int = 512,
-        relative_pose: #####
+        relative_pose:  #####
         bool = True,  # If True, the pose is relative to the first frame
         **kwargs,
     ):
@@ -126,8 +126,8 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         #
         self.png_depth_scale = config_dict["camera_params"]["png_depth_scale"]
 
-        self.orig_height = config_dict["camera_params"]["image_height"] # 680
-        self.orig_width = config_dict["camera_params"]["image_width"] # 1200
+        self.orig_height = config_dict["camera_params"]["image_height"]  # 680
+        self.orig_width = config_dict["camera_params"]["image_width"]  # 1200
         self.fx = config_dict["camera_params"]["fx"]
         self.fy = config_dict["camera_params"]["fy"]
         self.cx = config_dict["camera_params"]["cx"]
@@ -455,23 +455,25 @@ class ICLDataset(GradSLAMDataset):
         embedding = torch.load(embedding_file_path)
         return embedding.permute(0, 2, 3, 1)  # (1, H, W, embedding_dim)
 
+
 # hsb
 class ReplicaDataset(GradSLAMDataset):
+
     def __init__(
-        self,
-        # from dataset/dataconfigs/replica/replica.yaml
-        config_dict,
-        basedir, # Replica #####
-        sequence, # room0 #####
-        stride: Optional[int] = None, # 50
-        start: Optional[int] = 0,
-        end: Optional[int] = -1,
-        desired_height: Optional[int] = 480, # None
-        desired_width: Optional[int] = 640, # None
-        load_embeddings: Optional[bool] = False,
-        embedding_dir: Optional[str] = "embeddings",
-        embedding_dim: Optional[int] = 512,
-        **kwargs, #####
+            self,
+            # from dataset/dataconfigs/replica/replica.yaml
+            config_dict,
+            basedir,  # Replica #####
+            sequence,  # room0 #####
+            stride: Optional[int] = None,  # 50
+            start: Optional[int] = 0,
+            end: Optional[int] = -1,
+            desired_height: Optional[int] = 480,  # None
+            desired_width: Optional[int] = 640,  # None
+            load_embeddings: Optional[bool] = False,
+            embedding_dir: Optional[str] = "embeddings",
+            embedding_dim: Optional[int] = 512,
+            **kwargs,  #####
     ):
         """
             **kwargs:
@@ -1161,7 +1163,7 @@ def get_dataset(dataconfig, basedir, sequence, **kwargs):
         return Ai2thorDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["record3d"]:
         return Record3DDataset(config_dict, basedir, sequence, **kwargs)
-    elif config_dict["dataset_name"].lower() in ["realsense"]: # ma
+    elif config_dict["dataset_name"].lower() in ["realsense"]:  # ma
         return RealsenseDataset(config_dict, basedir, sequence, **kwargs)
     elif config_dict["dataset_name"].lower() in ["multiscan"]:
         return MultiscanDataset(config_dict, basedir, sequence, **kwargs)

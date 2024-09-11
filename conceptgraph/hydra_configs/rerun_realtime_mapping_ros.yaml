@@ -1,6 +1,6 @@
 defaults:
   - base
-  - base_mapping
+  - base_mapping_ros
   - replica_ros
 #  - record3d
   - sam

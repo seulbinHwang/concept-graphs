@@ -17,7 +17,7 @@ import cv2
 import numpy as np
 import scipy.ndimage as ndi
 import torch
-from PIL import Image
+import PIL
 from tqdm import trange
 # from open3d.io import read_pinhole_camera_parameters
 import hydra
@@ -74,24 +74,26 @@ RUN_START = False
 RUN_MIDDLE = False
 RUN_AFTER = False
 
+import tf_transformations
 import rclpy
-from rclpy.node import Node
 import message_filters
 from sensor_msgs.msg import CompressedImage, CameraInfo
-# from vision_msgs.msg import BoundingBox2DArray, BoundingBox2D
-import numpy as np
 import cv2
 from typing import Tuple, List, Dict, Any, Union, Optional
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from geometry_msgs.msg import TransformStamped
-import tf_transformations
 import argparse
 from tf2_ros import (ConnectivityException, ExtrapolationException,
                      LookupException)
 from scipy.spatial.transform import Rotation as R
 import os
 import traceback
+from rclpy.node import Node
+import numpy as np
+from sensor_msgs.msg import Image
+from realsense2_camera_msgs.msg import RGBD
+from cv_bridge import CvBridge
 
 
 class RealtimeHumanSegmenterNode(Node):
@@ -123,7 +125,8 @@ class RealtimeHumanSegmenterNode(Node):
         exp_path = "./Datasets/Replica/room0/exps"
         if os.path.exists(exp_path):
             user_input = input(
-                f"The folder {exp_path} already exists. Do you want to delete it? (y/n): ").strip().lower()
+                f"The folder {exp_path} already exists. Do you want to delete it? (y/n): "
+            ).strip().lower()
 
             if user_input == 'y':
                 # 폴더 삭제
@@ -131,9 +134,6 @@ class RealtimeHumanSegmenterNode(Node):
                 print(f"The folder {exp_path} has been deleted.")
             else:
                 print("The folder has not been deleted.")
-
-
-
 
         self.exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
                                              cfg.exp_suffix)
@@ -172,7 +172,7 @@ class RealtimeHumanSegmenterNode(Node):
             self.det_exp_path.mkdir(parents=True, exist_ok=True)
 
             ## Initialize the detection models
-            self.detection_model = measure_time(YOLO)('yolov8l-world.pt')
+            self.detection_model = measure_time(YOLO)('yolov8x-worldv2.pt')
             self.sam_predictor = SAM(
                 'sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
             (self.clip_model, _,
@@ -216,8 +216,44 @@ class RealtimeHumanSegmenterNode(Node):
         # self.bounding_boxes_pub = self.create_publisher(BoundingBox2DArray,
         #                                                 bbox_2d_topic, 10)
 
+        # 추가
+        # CvBridge for converting ROS images to OpenCV/numpy format
+        self.bridge = CvBridge()
+
+        # To store the rgb and depth images
+        self.rgb_image: Optional[np.ndarray] = None
+        self.depth_image: Optional[np.ndarray] = None
+        self.builtin_time = None
+
+        self.subscription = self.create_subscription(
+            RGBD,
+            '/robot0/realsense0/rgbd',  # 토픽 이름을 launch 파일에 맞게 수정
+            self.rgbd_callback,
+            10)
+
         self._set_rgbd_info_subscribers()
-        self._set_rgbd_subscribers()
+        # self._set_rgbd_subscribers()
+
+    def rgbd_callback(self, msg: RGBD) -> None:
+        # Extract RGB image from RGBD message
+        rgb_image = self.convert_image_to_np(msg.rgb, "rgb8")
+        rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
+        # Extract Depth image from RGBD message
+        depth_image = self.convert_image_to_np(
+            msg.depth, "16UC1") / 1000  # Assuming 16-bit depth
+        # Print the maximum depth value
+        builtin_time = msg.header.stamp
+        self.core_logic(rgb_image, depth_image, builtin_time)
+
+    def convert_image_to_np(self, img_msg: Image, encoding: str) -> np.ndarray:
+        """Convert ROS Image message to numpy array using CvBridge."""
+        try:
+            # Use cv_bridge to convert to numpy array
+            np_image = self.bridge.imgmsg_to_cv2(img_msg, encoding)
+            return np_image
+        except Exception as e:
+            self.get_logger().error(f"Failed to convert image: {str(e)}")
+            return np.array([])  # Return empty array on failure
 
     def _set_rgbd_subscribers(self):
         rgb_sub_topic_name = f"realsense{self.args.realsense_idx}/color"
@@ -236,8 +272,8 @@ class RealtimeHumanSegmenterNode(Node):
         self.ts.registerCallback(self.sync_callback)
 
     @staticmethod
-    def save_cropped_images(image_crops: List[Image.Image], folder_path: str,
-                            frame_idx) -> None:
+    def save_cropped_images(image_crops: List[PIL.Image.Image],
+                            folder_path: str, frame_idx) -> None:
         # 폴더가 존재하지 않으면 생성
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
@@ -306,14 +342,23 @@ class RealtimeHumanSegmenterNode(Node):
         # 쿼터니언 추출 및 회전 행렬 생성
         rotation = transform.transform.rotation
         quat = [rotation.x, rotation.y, rotation.z, rotation.w]
-        rotation_matrix = tf_transformations.quaternion_matrix(quat)  # 4x4 행렬
-
+        #trans: [      45.36      23.888   1.082e-08] quat: [6.011475333770007e-05, 2.852841381158057e-05, 0.11140977474491677, 0.9937745507224629]
+        orientation = np.array(tf_transformations.euler_from_quaternion(quat))
+        yaw = orientation[2]
+        print("trans:", np.round(trans, 2), "yaw:",
+              np.round(np.rad2deg(yaw), 2))
+        # make 4 by 4 yaw rotation matrix
+        yaw_matrix = np.array([[np.cos(yaw), -np.sin(yaw), 0, 0],
+                               [np.sin(yaw), np.cos(yaw), 0, 0], [0, 0, 1, 0],
+                               [0, 0, 0, 1]])
         # 4x4 변환 행렬 생성
         translation_matrix = np.identity(4)
-        translation_matrix[:, :3] = trans
+        translation_matrix[:3, 3] = trans
+        print("translation_matrix:", translation_matrix)
+        print("yaw_matrix:", yaw_matrix)
         # world_coord 기준 좌표 = transform_matrix @ agent_coord 기준 좌표
         # TODO: inv(rotation_matrix) 를 써야하는지 확인해보기
-        transform_matrix = translation_matrix @ rotation_matrix
+        transform_matrix = translation_matrix @ yaw_matrix
         # transform_matrix: (4, 4)
         return transform_matrix
 
@@ -329,17 +374,19 @@ class RealtimeHumanSegmenterNode(Node):
 
     def sync_callback(self, rgb_msg: CompressedImage,
                       depth_msg: CompressedImage):
-        #### 1. frame 처리
-        self.frame_idx += 1
-
-        color_path = None
-        if self.intrinsics is None:
-            return
-
         rgb_array, rgb_builtin_time = self.rgb_callback(rgb_msg)
         print(f"rgb_array: {rgb_array.shape}")
         depth_array, depth_builtin_time = self.depth_callback(depth_msg)
         print(f"depth_array: {depth_array.shape}")
+        self.core_logic(rgb_array, depth_array, depth_builtin_time)
+
+    def core_logic(self, rgb_array: np.ndarray, depth_array: np.ndarray,
+                   depth_builtin_time: Time):
+        color_path = None
+        #### 1. frame 처리
+        self.frame_idx += 1
+        if self.intrinsics is None:
+            return
         agent_pose = self._get_pose_data(depth_builtin_time)
         if agent_pose is None:
             return
@@ -498,7 +545,7 @@ class RealtimeHumanSegmenterNode(Node):
             """
             if curr_det.xyxy.shape[0] == 0:
                 print("No detections found in the image")
-                self.prev_adjusted_pose = camera_pose
+                # self.prev_adjusted_pose = camera_pose
                 return
             ##### 1.3. [시작] 개별 objects에 대한 CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
@@ -579,6 +626,7 @@ class RealtimeHumanSegmenterNode(Node):
 특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
     "이전 프레임의 카메라 위치"와 "현재 프레임의 카메라 위치"를 연결하는 경로를 시각적으로 나타냄
         """
+        return
         self.prev_adjusted_pose = orr_log_camera(self.intrinsics, camera_pose,
                                                  self.prev_adjusted_pose,
                                                  self.cfg.image_width,

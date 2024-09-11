@@ -360,8 +360,7 @@ def get_bounding_box(
                 f"Failed to get oriented bounding box: {e}. OrientedBoundingBox 인 경우와"
                 f"AxisAlignedBoundingBox 인 경우 모두 코드가 동작하도록 "
                 f"conceptgraph/utils/optional_rerun_wrapper.py 파일을 수정해주세요."
-                f"(bbox.center 같은.) 많은 디버깅이 필요할 수 있습니다."
-            )
+                f"(bbox.center 같은.) 많은 디버깅이 필요할 수 있습니다.")
             print(f"Met {e}, use axis aligned bounding box instead")
             return pcd.get_axis_aligned_bounding_box()
     else:
@@ -1565,6 +1564,43 @@ def batch_mask_depth_to_points_colors(
     return points, colors
 
 
+def visualize_processed_objects(
+        processed_objects: List[Dict[str, Any]]) -> None:
+    """
+    processed_objects 리스트에 있는 PointCloud와 BoundingBox 데이터를 시각화하는 함수.
+
+    Args:
+        processed_objects (List[Dict[str, Any]]):
+            PointCloud와 BoundingBox를 포함하는 딕셔너리의 리스트.
+    """
+    # 시각화에 사용할 Open3D 객체들을 저장할 리스트
+    geometries = []
+
+    # 각 processed_object에서 PointCloud와 BoundingBox를 추출하여 시각화 목록에 추가
+    for obj in processed_objects:
+        pcd = obj.get('pcd')
+        bbox = obj.get('bbox')
+
+        # PointCloud와 BoundingBox가 유효한지 확인 후 리스트에 추가
+        if isinstance(pcd, o3d.geometry.PointCloud):
+            geometries.append(pcd)
+        if isinstance(bbox, o3d.geometry.OrientedBoundingBox):
+            geometries.append(bbox)
+
+    # Open3D 시각화 도구를 사용해 PointCloud와 BoundingBox 시각화
+    o3d.visualization.draw_geometries(geometries)
+
+
+def _post_process_depth(masks: np.ndarray,
+                        depth_array: np.ndarray) -> np.ndarray:
+    N, _, _ = masks.shape
+    ignore_depth_mask = depth_array > 0.2  # (680, 1200)
+    # ignore_depth_mask -> (N, 680, 1200)
+    ignore_depth_mask = np.tile(ignore_depth_mask, (N, 1, 1))
+    masks = masks * ignore_depth_mask
+    return masks
+
+
 def detections_to_obj_pcd_and_bbox(depth_array,
                                    masks,
                                    cam_K,
@@ -1618,6 +1654,7 @@ def detections_to_obj_pcd_and_bbox(depth_array,
 
     """
     N, H, W = masks.shape
+    masks = _post_process_depth(masks, depth_array)
 
     # Convert inputs to tensors and move to the specified device
     depth_tensor = torch.from_numpy(depth_array).to(device).float()
@@ -1640,7 +1677,7 @@ image_rgb_tensor.shape:  torch.Size([680, 1200, 3])
     """
     points_tensor, colors_tensor = batch_mask_depth_to_points_colors(
         depth_tensor, masks_tensor, cam_K_tensor, image_rgb_tensor, device)
-
+    print("N: ", N)
     processed_objects = [None] * N  # Initialize with placeholders
     for i in range(N):
         mask_points = points_tensor[i]  # (H, W, 3)
@@ -1650,6 +1687,8 @@ image_rgb_tensor.shape:  torch.Size([680, 1200, 3])
         print("valid_points_mask.shape: ", valid_points_mask.shape)
         # 5개 이상의 포인트가 없으면 -> 무시한다.
         if torch.sum(valid_points_mask) < min_points_threshold:
+            print("torch.sum(valid_points_mask): ",
+                  torch.sum(valid_points_mask))
             continue
 
         valid_points = mask_points[valid_points_mask]  # (27633, 3)
@@ -1679,10 +1718,12 @@ obj_pcd_max_points = 5000
 
         bbox = get_bounding_box(spatial_sim_type, pcd)
         if bbox.volume() < 1e-6:
+            print("bbox.volume(): ", bbox.volume())
             continue
-
+        # pcd type: <class 'open3d.open3d.geometry.PointCloud'>
+        # bbox type: <class 'open3d.open3d.geometry.OrientedBoundingBox'>
         processed_objects[i] = {'pcd': pcd, 'bbox': bbox}
-
+    # visualize_processed_objects(processed_objects)
     return processed_objects
 
 

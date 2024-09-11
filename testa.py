@@ -1,29 +1,61 @@
-import open3d as o3d
-
+import rclpy
+from rclpy.node import Node
 import numpy as np
-
-# 샘플 포인트 클라우드 생성
-pcd = o3d.geometry.PointCloud()
-
-# 랜덤하게 포인트 클라우드 데이터 생성
-points = np.random.rand(100, 3)
-pcd.points = o3d.utility.Vector3dVector(points)
-
-# OrientedBoundingBox를 robust 모드로 계산
-obb = pcd.get_oriented_bounding_box(robust=True)
-
-# 포인트 클라우드와 Bounding Box 시각화
-o3d.visualization.draw_geometries([pcd, obb])
-
-# Bounding Box 정보 출력
-print("Oriented Bounding Box:")
-print(f"Center: {obb.center}")
-print(f"Center: {obb.get_center()}")
-print(f"Extent: {obb.extent}")
-print(f"Extent: {obb.get_extent()}")
-print(f"Rotation Matrix: \n{obb.R}")
+from sensor_msgs.msg import Image
+from realsense2_camera_msgs.msg import RGBD
+from cv_bridge import CvBridge
+from typing import Optional
 
 
-aabb = o3d.geometry.AxisAlignedBoundingBox([0, 0, 0], [1, 1, 1])
-print(aabb.center)  # center 확인
-print(aabb.extent)  # extent 확인
+class RGBDSubscriber(Node):
+    def __init__(self) -> None:
+        super().__init__('rgbd_subscriber')
+
+        # ROS2 Subscription to the RGBD topic
+        self.subscription = self.create_subscription(
+            RGBD,
+            '/robot0/realsense0/rgbd',  # 토픽 이름을 launch 파일에 맞게 수정
+            self.rgbd_callback,
+            10)
+
+        # CvBridge for converting ROS images to OpenCV/numpy format
+        self.bridge = CvBridge()
+
+        # To store the rgb and depth images
+        self.rgb_image: Optional[np.ndarray] = None
+        self.depth_image: Optional[np.ndarray] = None
+
+    def rgbd_callback(self, msg: RGBD) -> None:
+        # Extract RGB image from RGBD message
+        self.rgb_image = self.convert_image_to_np(msg.rgb, "rgb8")
+        self.get_logger().info('RGB Image received.')
+
+        # Extract Depth image from RGBD message
+        self.depth_image = self.convert_image_to_np(msg.depth, "16UC1")  # Assuming 16-bit depth
+        self.get_logger().info('Depth Image received.')
+
+    def convert_image_to_np(self, img_msg: Image, encoding: str) -> np.ndarray:
+        """Convert ROS Image message to numpy array using CvBridge."""
+        try:
+            # Use cv_bridge to convert to numpy array
+            np_image = self.bridge.imgmsg_to_cv2(img_msg, encoding)
+            return np_image
+        except Exception as e:
+            self.get_logger().error(f"Failed to convert image: {str(e)}")
+            return np.array([])  # Return empty array on failure
+
+
+def main(args=None) -> None:
+    rclpy.init(args=args)
+
+    # Initialize node and start spinning
+    rgbd_subscriber = RGBDSubscriber()
+    rclpy.spin(rgbd_subscriber)
+
+    # Shutdown on exit
+    rgbd_subscriber.destroy_node()
+    rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
