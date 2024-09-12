@@ -1175,16 +1175,26 @@ self.rgb_dist_coeffs: [          0           0           0           0          
         dist_coeffs = np.array(msg.d)  # (5,) # TODO: 전부 0으로 나오므로, 의미가 없음.
         camera_matrix = np.array(msg.k).reshape(3, 3)
         """
-self.intrinsics: (240, 424)
+self.intrinsics: (240, 424) 
 [[     209.05           0      212.36]
  [          0      209.05      118.82]
  [          0           0           1]]        
- self.intrinsics:  (480, 640)
+ self.intrinsics:  (480, 640) -> (480, 848 ? why?)
 [[     419.05           0      429.72]
  [          0      419.05      237.82]
- [          0           0           1]]    
+ [          0           0           1]]   
+ 
+ [[     377.81           0      318.96]
+ [          0      377.81      240.15]
+ [          0           0           1]]   
+ 
         """
+        # TODO: 나중에 지워야 함
         self.intrinsics = camera_matrix
+        self.intrinsics = np.array([[377.81, 0, 318.96],
+                          [0, 377.81, 240.15],
+                          [0, 0, 1]])
+
         """
 self.depth_dist_coeffs: [          0           0           0           0           0]
         """
