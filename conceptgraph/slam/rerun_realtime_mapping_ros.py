@@ -1124,7 +1124,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
         try: # time_msg: from builtin_interfaces.msg import Time
             time_float = time_msg.sec + time_msg.nanosec / 1e9
             print(f"----------{time_float}------------")
-            frames_yaml = self.tf_buffer.all_frames_as_yaml()
+            frames_yaml = self._tf_buffer.all_frames_as_yaml()
             print("frames_yaml:", frames_yaml)
             specific = self.get_transform_between_frames(
                 frames_yaml, self._target_frame, self._source_frame)
