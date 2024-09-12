@@ -262,6 +262,7 @@ class RealtimeHumanSegmenterNode(Node):
         # self._set_rgbd_subscribers()
 
     def rgbd_callback(self, msg: RGBD) -> None:
+        print("----------------start--------------------------------")
         # Extract RGB image from RGBD message
         rgb_image = self.convert_image_to_np(msg.rgb, "rgb8")
         rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
@@ -276,6 +277,7 @@ class RealtimeHumanSegmenterNode(Node):
         depth_camera_info = msg.depth_camera_info
         self.intrinsics, self.depth_dist_coeffs = self.depth_camera_info_callback(depth_camera_info)
         self.core_logic(rgb_image, depth_image, builtin_time)
+        print("----------------end--------------------------------")
 
     def convert_image_to_np(self, img_msg: Image, encoding: str) -> np.ndarray:
         """Convert ROS Image message to numpy array using CvBridge."""
@@ -1134,7 +1136,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
                 time=time_msg,
-                timeout=rclpy.duration.Duration(seconds=4.5))
+                timeout=rclpy.duration.Duration(seconds=0.5))
             agent_pose = self._transform_stamped_to_matrix(vl_transform)
 
             return agent_pose
