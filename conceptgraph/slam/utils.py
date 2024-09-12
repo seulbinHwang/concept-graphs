@@ -26,7 +26,6 @@ from conceptgraph.utils.ious import compute_3d_iou, compute_3d_iou_accurate_batc
 tracker = MappingTracker()
 
 
-
 def to_scalar(d) -> Union[int, float]:  # : np.ndarray | torch.Tensor | float
     '''
     Convert the d to a scalar
@@ -1589,10 +1588,10 @@ def visualize_processed_objects(
 def _post_process_depth(masks: np.ndarray,
                         depth_array: np.ndarray) -> np.ndarray:
     N, _, _ = masks.shape
-    ignore_depth_mask = depth_array > 0.2  # (680, 1200)
-    # ignore_depth_mask -> (N, 680, 1200)
-    ignore_depth_mask = np.tile(ignore_depth_mask, (N, 1, 1))
-    masks = masks * ignore_depth_mask
+    valid_depth_mask = depth_array > 0.2  # (680, 1200)
+    # valid_depth_mask -> (N, 680, 1200)
+    valid_depth_mask = np.tile(valid_depth_mask, (N, 1, 1))
+    masks = masks * valid_depth_mask
     return masks
 
 

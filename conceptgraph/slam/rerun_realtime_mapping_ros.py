@@ -118,14 +118,16 @@ wait_for_device_timeout:=60.0 \
 initial_reset:=true \
 clip_distance:=4.0
 """
+
+
 class RealtimeHumanSegmenterNode(Node):
 
     def __init__(self, cfg: DictConfig, args: argparse.Namespace):
         super().__init__('ros2_bridge')
-        self.cfg = cfg   # 1726064477.905918701 # rgbd
-        self.args = args # 1726064478.36382000 # tf
+        self.cfg = cfg  # 1726064477.905918701 # rgbd
+        self.args = args  # 1726064478.36382000 # tf
         self._target_frame = "vl"  #"vl" # child_frame_id:
-        self._source_frame = "base_link" # frame_id:
+        self._source_frame = "base_link"  # frame_id:
 
         # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
         self.tracker = MappingTracker()
@@ -247,7 +249,6 @@ class RealtimeHumanSegmenterNode(Node):
         self.depth_image: Optional[np.ndarray] = None
         self.builtin_time = None
 
-
         self.color_camera_matrix = None
         self.color_dist_coeffs = None
         self.intrinsics = None
@@ -258,7 +259,7 @@ class RealtimeHumanSegmenterNode(Node):
             self.rgbd_callback,
             10)
 
-        self._set_rgbd_info_subscribers()
+        # self._set_rgbd_info_subscribers()
         # self._set_rgbd_subscribers()
 
     def rgbd_callback(self, msg: RGBD) -> None:
@@ -269,13 +270,17 @@ class RealtimeHumanSegmenterNode(Node):
         # Extract Depth image from RGBD message
         depth_image = self.convert_image_to_np(
             msg.depth, "16UC1") / 1000  # Assuming 16-bit depth
+        print("rgb_image:", rgb_image.shape, "depth_image:", depth_image.shape)
+        raise ValueError("Stop here")
         # Print the maximum depth value
         builtin_time = msg.header.stamp
         time_sec = builtin_time.sec + builtin_time.nanosec * 1e-9
-        color_camera_info = msg.rgb_camera_info
-        self.color_camera_matrix, self.color_dist_coeffs = self.color_camera_info_callback(color_camera_info)
-        depth_camera_info = msg.depth_camera_info
-        self.intrinsics, self.depth_dist_coeffs = self.depth_camera_info_callback(depth_camera_info)
+        (self.color_camera_matrix,
+         self.color_dist_coeffs) = self.color_camera_info_callback(
+             msg.rgb_camera_info)
+        (self.intrinsics,
+         self.depth_dist_coeffs) = self.depth_camera_info_callback(
+             msg.depth_camera_info)
         self.core_logic(rgb_image, depth_image, builtin_time)
         print("----------------end--------------------------------")
 
@@ -329,7 +334,7 @@ class RealtimeHumanSegmenterNode(Node):
 
         depth_camera_info_topic_name = \
             f"realsense{self.args.realsense_idx}/depth_camera_info"
-        self.intrinsics = self.depth_dist_coeffs = None
+
         self.depth_camera_info_sub = self.create_subscription(
             CameraInfo, depth_camera_info_topic_name,
             self.depth_camera_info_callback, 10)
@@ -425,7 +430,6 @@ class RealtimeHumanSegmenterNode(Node):
         rgb_array, rgb_builtin_time = self.rgb_callback(rgb_msg)
         depth_array, depth_builtin_time = self.depth_callback(depth_msg)
         self.core_logic(rgb_array, depth_array, depth_builtin_time)
-
 
     def core_logic(self, rgb_array: np.ndarray, depth_array: np.ndarray,
                    depth_builtin_time: Time):
@@ -1118,12 +1122,12 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
         # Iterate through frames to find the relevant target and source frames
         for frame_name, frame_info in frames_data.items():
             if frame_name == source_frame and target_frame in frame_info[
-                'parent']:
+                    'parent']:
                 return frame_info  # Return the data for the transform
         return None
 
     def _get_pose_data(self, time_msg: Time) -> Optional[np.ndarray]:
-        try: # time_msg: from builtin_interfaces.msg import Time
+        try:  # time_msg: from builtin_interfaces.msg import Time
             vl_transform = self._tf_buffer.lookup_transform(
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
@@ -1171,9 +1175,14 @@ self.rgb_dist_coeffs: [          0           0           0           0          
         dist_coeffs = np.array(msg.d)  # (5,) # TODO: 전부 0으로 나오므로, 의미가 없음.
         camera_matrix = np.array(msg.k).reshape(3, 3)
         """
-self.intrinsics: [[     209.05           0      212.36]
+self.intrinsics: (240, 424)
+[[     209.05           0      212.36]
  [          0      209.05      118.82]
  [          0           0           1]]        
+ self.intrinsics:  (480, 640)
+[[     419.05           0      429.72]
+ [          0      419.05      237.82]
+ [          0           0           1]]    
         """
         self.intrinsics = camera_matrix
         """
