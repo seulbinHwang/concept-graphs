@@ -1125,8 +1125,8 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
         return None
 
     def _get_pose_data(self, time_msg: Time) -> Optional[np.ndarray]:
-        try:
-            time_float = time_msg.to_msg().sec + time_msg.to_msg().nanosec / 1e9
+        try: # time_msg: from builtin_interfaces.msg import Time
+            time_float = time_msg.sec + time_msg.nanosec / 1e9
             print(f"----------{time_float}------------")
             frames_yaml = self.tf_buffer.all_frames_as_yaml()
             print("frames_yaml:", frames_yaml)
