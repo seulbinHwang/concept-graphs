@@ -229,7 +229,7 @@ class RealtimeHumanSegmenterNode(Node):
         self.counter = 0
         ###################################
         self.frame_idx = -1
-        self._tf_buffer = Buffer(cache_time=rclpy.duration.Duration(seconds=20.0))
+        self._tf_buffer = Buffer(cache_time=rclpy.duration.Duration(seconds=5.0))
         self._tf_listener = TransformListener(self._tf_buffer, self)
         self._frame_idx = 0
         self.extrinsic = self._set_extrinsic()
@@ -1136,7 +1136,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
                 time=time_msg,
-                timeout=rclpy.duration.Duration(seconds=0.5))
+                timeout=rclpy.duration.Duration(seconds=0.3))
             agent_pose = self._transform_stamped_to_matrix(vl_transform)
 
             return agent_pose
