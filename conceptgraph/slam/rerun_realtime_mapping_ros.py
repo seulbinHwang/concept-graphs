@@ -11,7 +11,7 @@ from pathlib import Path
 import pickle
 import gzip
 from typing import List, Dict, Any, Optional
-
+import yaml
 # Third-party imports
 import cv2
 import numpy as np
@@ -122,10 +122,10 @@ class RealtimeHumanSegmenterNode(Node):
 
     def __init__(self, cfg: DictConfig, args: argparse.Namespace):
         super().__init__('ros2_bridge')
-        self.cfg = cfg
-        self.args = args
-        self._target_frame = "vl"  #"vl"
-        self._source_frame = "base_link"
+        self.cfg = cfg   # 1726064477.905918701 # rgbd
+        self.args = args # 1726064478.36382000 # tf
+        self._target_frame = "vl"  #"vl" # child_frame_id:
+        self._source_frame = "base_link" # frame_id:
 
         # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
         self.tracker = MappingTracker()
@@ -229,7 +229,7 @@ class RealtimeHumanSegmenterNode(Node):
         self.counter = 0
         ###################################
         self.frame_idx = -1
-        self._tf_buffer = Buffer()
+        self._tf_buffer = Buffer(cache_time=rclpy.duration.Duration(seconds=20.0))
         self._tf_listener = TransformListener(self._tf_buffer, self)
         self._frame_idx = 0
         self.extrinsic = self._set_extrinsic()
@@ -1111,8 +1111,28 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
                 save_video_detections(self.det_exp_path)
         ##### 5.4. [끝]
 
+    @staticmethod
+    def get_transform_between_frames(frames_yaml: str, target_frame: str,
+                                     source_frame: str):
+        # Parse the YAML string
+        frames_data = yaml.safe_load(frames_yaml)
+
+        # Iterate through frames to find the relevant target and source frames
+        for frame_name, frame_info in frames_data.items():
+            if frame_name == source_frame and target_frame in frame_info[
+                'parent']:
+                return frame_info  # Return the data for the transform
+        return None
+
     def _get_pose_data(self, time_msg: Time) -> Optional[np.ndarray]:
         try:
+            time_float = time_msg.to_msg().sec + time_msg.to_msg().nanosec / 1e9
+            print(f"----------{time_float}------------")
+            frames_yaml = self.tf_buffer.all_frames_as_yaml()
+            print("frames_yaml:", frames_yaml)
+            specific = self.get_transform_between_frames(
+                frames_yaml, self._target_frame, self._source_frame)
+            print("specific:", specific)
             vl_transform = self._tf_buffer.lookup_transform(
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
