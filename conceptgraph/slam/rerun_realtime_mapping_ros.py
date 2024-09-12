@@ -270,8 +270,6 @@ class RealtimeHumanSegmenterNode(Node):
         # Extract Depth image from RGBD message
         depth_image = self.convert_image_to_np(
             msg.depth, "16UC1") / 1000  # Assuming 16-bit depth
-        print("rgb_image:", rgb_image.shape, "depth_image:", depth_image.shape)
-        raise ValueError("Stop here")
         # Print the maximum depth value
         builtin_time = msg.header.stamp
         time_sec = builtin_time.sec + builtin_time.nanosec * 1e-9
