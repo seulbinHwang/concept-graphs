@@ -1,7 +1,7 @@
 import logging
 import os
 
-from conceptgraph.utils.general_utils import find_existing_image_path
+from conceptgraph.utils import general_utils
 from conceptgraph.utils.geometry import rotation_matrix_to_quaternion
 import numpy as np
 
@@ -169,7 +169,7 @@ def orr_log_annotated_image(color_path, det_exp_vis_path):
     color_path = color_path
     det_exp_vis_path = det_exp_vis_path
     base_vis_save_path = det_exp_vis_path / color_path.stem
-    existing_vis_save_path = find_existing_image_path(base_vis_save_path,
+    existing_vis_save_path = general_utils.find_existing_image_path(base_vis_save_path,
                                                       ['.jpg', '.png'])
     if existing_vis_save_path:
         orr.log("world/camera/rgb_image_annotated",
@@ -259,10 +259,10 @@ def orr_log_objs_pcd_and_bbox(objects, obj_classes):
 
         # Assuming bbox is extracted as before
         bbox = obj['bbox']
-        centers = [bbox.center]
-        half_sizes = [bbox.extent / 2]
+        centers = [general_utils.get_bb_center(bbox)]
+        half_sizes = [general_utils.get_bb_extent(bbox) / 2]
         # Convert rotation matrix to quaternion
-        bbox_quaternion = [rotation_matrix_to_quaternion(bbox.R)]
+        bbox_quaternion = [rotation_matrix_to_quaternion(general_utils.get_bb_R(bbox))]
 
         bbox_entity = base_entity_path + "/bbox" + f"/{obj_label}"
         orr.log(

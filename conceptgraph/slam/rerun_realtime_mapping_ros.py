@@ -1124,19 +1124,10 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
 
     def _get_pose_data(self, time_msg: Time) -> Optional[np.ndarray]:
         try: # time_msg: from builtin_interfaces.msg import Time
-            time_float = time_msg.sec + time_msg.nanosec / 1e9
-            print(f"----------{time_float}------------")
-            # frames_yaml = self._tf_buffer.all_frames_as_yaml()
-            # print("frames_yaml:", frames_yaml)
-            # specific = self.get_transform_between_frames(
-            #     frames_yaml, self._target_frame, self._source_frame)
-            # print("specific:", specific)
-            print("---------------------------------")
             vl_transform = self._tf_buffer.lookup_transform(
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
                 time=time_msg)
-                # timeout=rclpy.duration.Duration(seconds=0.3))
             agent_pose = self._transform_stamped_to_matrix(vl_transform)
 
             return agent_pose

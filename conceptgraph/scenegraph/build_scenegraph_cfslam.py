@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from typing import List, Literal, Union
 from textwrap import wrap
 
-from conceptgraph.utils.general_utils import prjson
+from conceptgraph.utils import general_utils
 
 import cv2
 import matplotlib.pyplot as plt
@@ -493,8 +493,7 @@ def refine_node_captions(args):
         _bbox = scene_map[_i]["bbox"]
         # _bbox = o3d.geometry.OrientedBoundingBox.create_from_points(o3d.utility.Vector3dVector(scene_map[_i]["bbox"]))
         _dict["id"] = _caption["id"]
-        # _dict["bbox_extent"] = np.round(_bbox.extent, 1).tolist()
-        # _dict["bbox_center"] = np.round(_bbox.center, 1).tolist()
+
         _dict["captions"] = _caption["captions"]
         # _dict["low_confidences"] = _caption["low_confidences"]
         # Convert to printable string
@@ -529,7 +528,7 @@ def refine_node_captions(args):
             unsucessful_responses += 1
 
         # print output
-        prjson([{"role": "user", "content": preds}])
+        general_utils.prjson([{"role": "user", "content": preds}])
         print(chat_completion["choices"][0]["message"]["content"])
         print(f"Unsucessful responses so far: {unsucessful_responses}")
         _dict["response"] = chat_completion["choices"][0]["message"][
@@ -762,18 +761,17 @@ def build_scenegraph(args):
                     segmentidx2 = component[v]
                     _bbox1 = scene_map[segmentidx1]["bbox"]
                     _bbox2 = scene_map[segmentidx2]["bbox"]
-
                     input_dict = {
                         "object1": {
                             "id": segmentidx1,
-                            "bbox_extent": np.round(_bbox1.extent, 1).tolist(),
-                            "bbox_center": np.round(_bbox1.center, 1).tolist(),
+                            "bbox_extent": np.round(general_utils.get_bb_extent(_bbox1), 1).tolist(),
+                            "bbox_center": np.round(general_utils.get_bb_center(_bbox1), 1).tolist(),
                             "object_tag": object_tags[segmentidx1],
                         },
                         "object2": {
                             "id": segmentidx2,
-                            "bbox_extent": np.round(_bbox2.extent, 1).tolist(),
-                            "bbox_center": np.round(_bbox2.center, 1).tolist(),
+                            "bbox_extent": np.round(general_utils.get_bb_extent(_bbox2), 1).tolist(),
+                            "bbox_center": np.round(general_utils.get_bb_center(_bbox2), 1).tolist(),
                             "object_tag": object_tags[segmentidx2],
                         },
                     }
@@ -901,9 +899,9 @@ def generate_scenegraph_json(args):
             "id":
                 segment["caption_dict"]["id"],
             "bbox_extent":
-                np.round(segment['bbox'].extent, 1).tolist(),
+                np.round(general_utils.get_bb_extent(segment['bbox']), 1).tolist(),
             "bbox_center":
-                np.round(segment['bbox'].center, 1).tolist(),
+                np.round(general_utils.get_bb_center(segment['bbox']), 1).tolist(),
             "possible_tags":
                 segment["caption_dict"]["response"]["possible_tags"],
             "object_tag":

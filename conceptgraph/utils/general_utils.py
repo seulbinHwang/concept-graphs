@@ -15,11 +15,36 @@ import scipy.ndimage as ndi
 from conceptgraph.utils.vlm import get_obj_captions_from_image_gpt4v, get_obj_rel_from_image_gpt4v, vlm_extract_object_captions
 import cv2
 import re
+import open3d as o3d
+from typing import Union
 
 from omegaconf import OmegaConf
 import torch
 import numpy as np
 import time
+
+def get_bb_center(bbox: Union[o3d.geometry.OrientedBoundingBox,
+                              o3d.geometry.AxisAlignedBoundingBox]) -> np.ndarray:
+    if isinstance(bbox, o3d.geometry.OrientedBoundingBox):
+        return bbox.center
+    elif isinstance(bbox, o3d.geometry.AxisAlignedBoundingBox):
+        return bbox.get_center().squeeze(-1)
+    else:
+        raise TypeError(f"Invalid type for bbox: {type(bbox)}")
+
+def get_bb_extent(bbox: Union[o3d.geometry.OrientedBoundingBox,
+                                o3d.geometry.AxisAlignedBoundingBox]) -> np.ndarray:
+    if isinstance(bbox, o3d.geometry.OrientedBoundingBox):
+        return bbox.extent
+    elif isinstance(bbox, o3d.geometry.AxisAlignedBoundingBox):
+        return bbox.get_extent().squeeze(-1)
+
+def get_bb_R(bbox: Union[o3d.geometry.OrientedBoundingBox,
+                            o3d.geometry.AxisAlignedBoundingBox]) -> np.ndarray:
+    if isinstance(bbox, o3d.geometry.OrientedBoundingBox):
+        return bbox.R
+    elif isinstance(bbox, o3d.geometry.AxisAlignedBoundingBox):
+        return np.eye(3)
 
 
 class Timer:
@@ -893,9 +918,9 @@ def save_obj_json(exp_suffix, exp_out_path, objects):
     json_obj_list = {}
     for curr_idx, curr_obj in enumerate(objects):
         obj_key = f"object_{curr_idx + 1}"
-        bbox_extent = [round(val, 2) for val in curr_obj['bbox'].extent
+        bbox_extent = [round(val, 2) for val in get_bb_extent(curr_obj['bbox'])
                       ]  # Round values to 2 decimal places
-        bbox_center = [round(val, 2) for val in curr_obj['bbox'].center
+        bbox_center = [round(val, 2) for val in get_bb_center(curr_obj['bbox'])
                       ]  # Assuming `center` is an iterable like a list or tuple
         bbox_volume = round(bbox_extent[0] * bbox_extent[1] * bbox_extent[2],
                             2)  # Calculate volume and round to 2 decimal places
