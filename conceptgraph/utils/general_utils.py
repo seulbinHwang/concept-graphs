@@ -25,23 +25,30 @@ import time
 
 def get_bb_center(bbox: Union[o3d.geometry.OrientedBoundingBox,
                               o3d.geometry.AxisAlignedBoundingBox]) -> np.ndarray:
+    print("bbox:", type(bbox))
     if isinstance(bbox, o3d.geometry.OrientedBoundingBox):
         return bbox.center
     elif isinstance(bbox, o3d.geometry.AxisAlignedBoundingBox):
+        print("bbox.get_center():", bbox.get_center())
+        print("bbox.get_center():", bbox.get_center().shape)
         return bbox.get_center().squeeze(-1)
     else:
         raise TypeError(f"Invalid type for bbox: {type(bbox)}")
 
 def get_bb_extent(bbox: Union[o3d.geometry.OrientedBoundingBox,
                                 o3d.geometry.AxisAlignedBoundingBox]) -> np.ndarray:
+    print("bbox:", type(bbox))
     if isinstance(bbox, o3d.geometry.OrientedBoundingBox):
         return bbox.extent
     elif isinstance(bbox, o3d.geometry.AxisAlignedBoundingBox):
+        print("bbox.get_extent():", bbox.get_extent())
+        print("bbox.get_extent():", bbox.get_extent().shape)
         return bbox.get_extent().squeeze(-1)
 
 def get_bb_R(bbox: Union[o3d.geometry.OrientedBoundingBox,
                             o3d.geometry.AxisAlignedBoundingBox]) -> np.ndarray:
     if isinstance(bbox, o3d.geometry.OrientedBoundingBox):
+        print("bbox.R:", bbox.R.shape)
         return bbox.R
     elif isinstance(bbox, o3d.geometry.AxisAlignedBoundingBox):
         return np.eye(3)
