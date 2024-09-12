@@ -271,7 +271,6 @@ class RealtimeHumanSegmenterNode(Node):
         # Print the maximum depth value
         builtin_time = msg.header.stamp
         time_sec = builtin_time.sec + builtin_time.nanosec * 1e-9
-        print(f"RGBD message received at time: {time_sec}")
         color_camera_info = msg.rgb_camera_info
         self.color_camera_matrix, self.color_dist_coeffs = self.color_camera_info_callback(color_camera_info)
         depth_camera_info = msg.depth_camera_info
@@ -422,9 +421,7 @@ class RealtimeHumanSegmenterNode(Node):
     def sync_callback(self, rgb_msg: CompressedImage,
                       depth_msg: CompressedImage):
         rgb_array, rgb_builtin_time = self.rgb_callback(rgb_msg)
-        print(f"rgb_array: {rgb_array.shape}")
         depth_array, depth_builtin_time = self.depth_callback(depth_msg)
-        print(f"depth_array: {depth_array.shape}")
         self.core_logic(rgb_array, depth_array, depth_builtin_time)
 
 
@@ -464,7 +461,6 @@ class RealtimeHumanSegmenterNode(Node):
         # CHECK: 내가 수정했음
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
             self.det_exp_vis_path, color_path, frame_idx=self.frame_idx)
-        print("vis_save_path_for_vlm:", vis_save_path_for_vlm)
         vis_save_path_for_vlm_edges = get_vlm_annotated_image_path(
             self.det_exp_vis_path,
             color_path,
@@ -1133,6 +1129,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
             specific = self.get_transform_between_frames(
                 frames_yaml, self._target_frame, self._source_frame)
             print("specific:", specific)
+            print("---------------------------------")
             vl_transform = self._tf_buffer.lookup_transform(
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
