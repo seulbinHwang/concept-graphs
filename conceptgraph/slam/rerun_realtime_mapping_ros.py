@@ -1134,7 +1134,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
                 target_frame=self._target_frame,
                 source_frame=self._source_frame,
                 time=time_msg,
-                timeout=rclpy.duration.Duration(seconds=1.5))
+                timeout=rclpy.duration.Duration(seconds=4.5))
             agent_pose = self._transform_stamped_to_matrix(vl_transform)
 
             return agent_pose
