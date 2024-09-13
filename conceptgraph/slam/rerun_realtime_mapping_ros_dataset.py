@@ -153,7 +153,8 @@ class DatasetObjectMapper:
             rgb_np = (rgb_np).astype(np.uint8)  # (H, W, 3)
             bgr_np = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2BGR)  # (H, W, 3)
             # Assert that bgr_np and depth_array are of the same shape.
-            assert bgr_np.shape[:2] == depth_array.shape
+            assert bgr_np.shape[:2] == depth_array.shape, (
+                f"Shape mismatch: bgr{bgr_np.shape[:2]} vs depth{depth_array.shape}")
 
             camera_pose_ = dataset.poses[frame_idx]
             camera_pose_ = camera_pose_.cpu().numpy()  # (4, 4)
