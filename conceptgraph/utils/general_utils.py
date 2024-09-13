@@ -22,6 +22,124 @@ from omegaconf import OmegaConf
 import torch
 import numpy as np
 import time
+import numpy as np
+from typing import Tuple
+
+
+
+def extract_rotation_translation(T: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    주어진 4x4 동차 변환 행렬로부터 회전 행렬과 변환 벡터를 추출합니다.
+
+    Parameters:
+    T (numpy.ndarray): 4x4 동차 변환 행렬
+
+    Returns:
+    Tuple containing:
+        - R (numpy.ndarray): 3x3 회전 행렬
+        - t (numpy.ndarray): 3x1 변환 벡터
+    """
+    # 회전 행렬은 상위 3x3 부분입니다.
+    R: np.ndarray = T[:3, :3]
+    # 변환 벡터는 상위 3개의 요소를 가진 마지막 열입니다.
+    t: np.ndarray = T[:3, 3]
+    return R, t
+
+def rotation_matrix_to_euler_angles(R: np.ndarray) -> Tuple[float, float, float]:
+    """
+    3x3 회전 행렬로부터 roll, pitch, yaw 각도를 추출합니다.
+    회전 순서는 ZYX(yaw-pitch-roll) 순서입니다.
+
+    Parameters:
+    R (numpy.ndarray): 3x3 회전 행렬
+
+    Returns:
+    Tuple containing:
+        - roll (float): X축 회전 각도 (라디안)
+        - pitch (float): Y축 회전 각도 (라디안)
+        - yaw (float): Z축 회전 각도 (라디안)
+    """
+    sy: float = np.sqrt(R[0, 0] ** 2 + R[1, 0] ** 2)
+
+    singular: bool = sy < 1e-6
+
+    if not singular:
+        roll: float = np.arctan2(R[2, 1], R[2, 2])
+        pitch: float = np.arctan2(-R[2, 0], sy)
+        yaw: float = np.arctan2(R[1, 0], R[0, 0])
+    else:
+        # 특이점일 경우
+        roll = np.arctan2(-R[1, 2], R[1, 1])
+        pitch = np.arctan2(-R[2, 0], sy)
+        yaw = 0.0
+
+    return roll, pitch, yaw
+
+def extract_xyz_rpw(T: np.ndarray) -> np.ndarray:
+    assert T.shape == (4, 4)
+    R, t = extract_rotation_translation(T)
+    roll, pitch, yaw = rotation_matrix_to_euler_angles(R)
+    xyz_rpw = np.concatenate([t, [roll, pitch, yaw]]) # shape: (6,)
+    xyz_rpw_degree = xyz_rpw.copy()
+    xyz_rpw_degree[3:] = np.rad2deg(xyz_rpw_degree[3:])
+    return xyz_rpw_degree
+
+
+
+def euler_angles_to_rotation_matrix(roll: float, pitch: float, yaw: float) -> np.ndarray:
+    """
+    roll, pitch, yaw 각도로부터 3x3 회전 행렬을 생성합니다.
+    회전 순서는 ZYX(yaw-pitch-roll) 순서입니다.
+
+    Parameters:
+    roll (float): X축 회전 각도 (라디안)
+    pitch (float): Y축 회전 각도 (라디안)
+    yaw (float): Z축 회전 각도 (라디안)
+
+    Returns:
+    R (numpy.ndarray): 3x3 회전 행렬
+    """
+    Rx: np.ndarray = np.array([[1, 0, 0],
+                               [0, np.cos(roll), -np.sin(roll)],
+                               [0, np.sin(roll),  np.cos(roll)]])
+    Ry: np.ndarray = np.array([[ np.cos(pitch), 0, np.sin(pitch)],
+                               [0, 1, 0],
+                               [-np.sin(pitch), 0, np.cos(pitch)]])
+    Rz: np.ndarray = np.array([[np.cos(yaw), -np.sin(yaw), 0],
+                               [np.sin(yaw),  np.cos(yaw), 0],
+                               [0, 0, 1]])
+    R: np.ndarray = Rz @ Ry @ Rx
+    return R
+
+def xyz_rpw_to_transformation_matrix(xyz_rpw: np.ndarray) -> np.ndarray:
+    """
+    주어진 xyz_rpw 벡터로부터 4x4 동차 변환 행렬을 생성합니다.
+
+    Parameters:
+    xyz_rpw (numpy.ndarray): shape (6,) 벡터, [x, y, z, roll, pitch, yaw]
+
+    Returns:
+    T (numpy.ndarray): 4x4 동차 변환 행렬
+    """
+    assert xyz_rpw.shape == (6,), "입력 벡터의 크기는 (6,)이어야 합니다."
+
+    # 변환 벡터와 각도 추출
+    t: np.ndarray = xyz_rpw[:3]    # x, y, z
+    roll: float = xyz_rpw[3]
+    pitch: float = xyz_rpw[4]
+    yaw: float = xyz_rpw[5]
+
+    # 회전 행렬 생성
+    R: np.ndarray = euler_angles_to_rotation_matrix(roll, pitch, yaw)
+
+    # 동차 변환 행렬 생성
+    T: np.ndarray = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = t
+
+    return T
+
+
 
 def get_bb_center(bbox: Union[o3d.geometry.OrientedBoundingBox,
                               o3d.geometry.AxisAlignedBoundingBox]) -> np.ndarray:

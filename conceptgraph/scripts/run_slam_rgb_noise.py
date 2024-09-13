@@ -1,16 +1,19 @@
 import argparse
 import json
 import os
+# 환경 변수 설정
+os.environ['TORCH_USE_CUDA_DSA'] = '1'
 from pathlib import Path
 import numpy as np
 import torch
+torch.autograd.set_detect_anomaly(True)
 import torch.nn.functional as F
 from tqdm import trange
 
 import open3d as o3d
 
 from conceptgraph.dataset.datasets_common import get_dataset
-
+from conceptgraph.utils import general_utils
 from gradslam.slam.pointfusion import PointFusion
 from gradslam.structures.pointclouds import Pointclouds
 from gradslam.structures.rgbdimages import RGBDImages
@@ -50,6 +53,7 @@ def get_parser() -> argparse.ArgumentParser:
         help="Load GT semantic segmentation and run fusion on them. ")
 
     return parser
+
 
 
 def main(args: argparse.Namespace):
@@ -118,14 +122,45 @@ scene_id : $SCENE_NAME
         embedding_dim=embedding_dim,
         relative_pose=False,
     )
+    """ RGBDImages
+    - rgb / depth / intrinsics / extinsics(pose) / 
+    - vertex_map : 로컬 좌표계에서 깊이 맵을 3D 포인트 클라우드로
+    - normal_map
+    - global_vertex_map / global_normal_map
+    - valid_depth_mask
+    """
 
-    slam = PointFusion(odom="gt", dsratio=1, device=args.device)
 
+    #     rgbdimages = RGBDImages(colors, depths, intrinsics, poses, channels_first=False)
+    slam = PointFusion(odom="gradicp", dsratio=4, device=args.device)
+    #     pointclouds, recovered_poses = slam(rgbdimages)
+
+    """ Pointclouds
+    - points / normals / colors / confidences 
+    - 변환 / 스케일링 / 오프셋 추가 / 핀홀 프로젝션
+    -  포인트 클라우드 데이터를 두 가지 형태로 저장할 수 있습니다:
+      - 리스트 형태 / 패딩된 형태
+    
+    """
     frame_cur, frame_prev = None, None
     pointclouds = Pointclouds(device=args.device)
     """
     len(dataset): RGB images path에 저장된 장수 (stride로 설정한 값만큼)
     """
+    # 랜덤 넘버 생성기의 시드를 설정하여 재현성 확보
+    np.random.seed(42)
+    ##########################################
+    # 최대 노이즈 수준을 변수로 정의합니다.
+    max_xyz_noise = 0.1  # 위치 노이즈 최대값 (단위: 미터)
+    max_angle_noise_deg = 10  # 각도 노이즈 최대값 (단위: 도)
+    max_angle_noise_rad = np.deg2rad(max_angle_noise_deg)
+    # 표준편차 계산 (95% 확률로 노이즈가 범위 내에 있음)
+    xyz_noise_std = max_xyz_noise / 1.96
+    angle_noise_std_deg = max_angle_noise_deg / 1.96
+    angle_noise_std_rad = np.deg2rad(angle_noise_std_deg)
+    ##########################################
+    avg_fixed_minus_gt_deg = np.zeros(6)
+    avg_noise_deg = np.zeros(6)
     for idx in trange(len(dataset)):
         if load_embeddings:
             _color, _depth, intrinsics, _pose, _embedding = dataset[idx]
@@ -142,22 +177,67 @@ scene_id : $SCENE_NAME
             _embedding = None
             _confidence = None
 
-        pose_np = _pose.cpu().numpy()
+        pose_np_gt = _pose.cpu().numpy()
+        pose_flat_deg_np_gt = general_utils.extract_xyz_rpw(pose_np_gt)
+        pose_flat_rad_np_gt = pose_flat_deg_np_gt.copy()
+        pose_flat_rad_np_gt[3:] = np.deg2rad(pose_flat_deg_np_gt[3:])
 
-        _pose = torch.from_numpy(pose_np).to(_pose.device).to(_pose.dtype)
+        ############### 노이즈 추가 ###############
+        # 위치 노이즈 생성 (가우시안 분포, 평균 0, 표준편차 xyz_noise_std)
+        xyz_noise = np.random.normal(0, xyz_noise_std, size=3)
+
+        # 각도 노이즈 생성 (가우시안 분포, 평균 0, 표준편차 angle_noise_std_rad)
+        rpy_noise = np.random.normal(0, angle_noise_std_rad, size=3)
+        rpy_noise_deg = np.rad2deg(rpy_noise)
+        noise_flat_deg = np.abs(np.concatenate([xyz_noise, rpy_noise_deg]))
+
+        avg_noise_deg += noise_flat_deg
+
+        # 노이즈를 pose_flat_np_gt에 주입
+        pose_flat_rad_np_noisy = pose_flat_rad_np_gt.copy()  # 원본 데이터를 보존하기 위해 복사
+        pose_flat_rad_np_noisy[:3] += xyz_noise  # x, y, z에 노이즈 추가
+        pose_flat_rad_np_noisy[3:] += rpy_noise  # roll, pitch, yaw에 노이즈 추가
+        pose_flat_deg_np_noisy = pose_flat_rad_np_noisy.copy()
+        pose_flat_deg_np_noisy[3:] = np.rad2deg(pose_flat_rad_np_noisy[3:])
+
+        ##########################################
+        pose_noise_np = general_utils.xyz_rpw_to_transformation_matrix(pose_flat_rad_np_noisy)
+        pose_noise_tensor = torch.from_numpy(pose_noise_np).to(_pose.device).to(_pose.dtype)  # (4, 4)
+
+
+
 
         frame_cur = RGBDImages(
             rgb_image=_color.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 3)
             depth_image=_depth.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 1)
             intrinsics=intrinsics.unsqueeze(0).unsqueeze(0),  # (1, 1, 4, 4)
-            poses=_pose.unsqueeze(0).unsqueeze(0),  # (1, 1, 4, 4)
+            poses=pose_noise_tensor.unsqueeze(0).unsqueeze(0),  # (1, 1, 4, 4)
             embeddings=_embedding,  # None
             confidence_image=_confidence,  # None
         )
 
-        pointclouds, _ = slam.step(pointclouds, frame_cur, frame_prev)
-        # frame_prev = frame_cur # Keep it None when we use the gt odom
+        pointclouds, recovered_poses = slam.step(pointclouds, live_frame=frame_cur, prev_frame=frame_prev, use_current_pose=True)
+        recovered_pose_np = recovered_poses.cpu().numpy().squeeze()
+        recovered_pose_flat_deg_np = general_utils.extract_xyz_rpw(recovered_pose_np)
+        print("[start]--------------")
+        print("pose_flat_deg_np_noisy: ", np.round(pose_flat_deg_np_noisy, 2))
+        print("pose_flat_deg_np_gt: ", np.round(pose_flat_deg_np_gt, 2))
+        print("recovered_pose_flat_deg_np: ", np.round(recovered_pose_flat_deg_np, 2))
+        fixed_minus_gt_deg = np.abs(recovered_pose_flat_deg_np - pose_flat_deg_np_gt)
+        avg_fixed_minus_gt_deg += fixed_minus_gt_deg
+        print("noise_flat_deg: ", np.round(noise_flat_deg, 2))
+        print("fixed_minus_gt_deg: ", np.round(fixed_minus_gt_deg, 2))
+        print("[end]--------------")
+
+
+        frame_prev = frame_cur # Keep it None when we use the gt odom
         torch.cuda.empty_cache()
+    avg_fixed_minus_gt_deg /= len(dataset)
+    avg_noise_deg /= len(dataset)
+    print("-----------------")
+    print("avg_fixed_minus_gt_deg: ", np.round(avg_fixed_minus_gt_deg, 2))
+    print("avg_noise_deg: ", np.round(avg_noise_deg, 2))
+    print("-----------------")
     # dataset_root =  $REPLICA_ROOT = /path/to/Replica
     # scene_id  = $SCENE_NAME = room0
     # dir_to_save_map = /path/to/Replica/room0/rgb_cloud

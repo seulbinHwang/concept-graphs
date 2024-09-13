@@ -203,7 +203,7 @@ class DatasetObjectMapper:
         self.orr.spawn()
 
         self.cfg = process_cfg(self.cfg)
-        self.objects = MapObjectList(device=self.args.device)
+        self.objects = MapObjectList(device=self.cfg.device)
         self.map_edges = MapEdgeMapping(self.objects)
 
         # output folder for this mapping experiment
@@ -978,7 +978,7 @@ camera_pose.shape: (4, 4)
                 dbscan_eps=self.cfg["dbscan_eps"],  # 0.1
                 dbscan_min_points=self.cfg["dbscan_min_points"],  # 10
                 spatial_sim_type=self.cfg["spatial_sim_type"],  # overlap
-                device=self.args.device,
+                device=self.cfg.device,
                 do_edges=self.cfg["make_edges"],  # True
                 map_edges=self.map_edges)
         orr_log_objs_pcd_and_bbox(self.objects, self.obj_classes)
@@ -1272,10 +1272,6 @@ def main(cfg: DictConfig):
         type=int,
         default=5000,
         help="Maximum number of points in an object's point cloud")
-    parser.add_argument('--device',
-                        type=str,
-                        default='cpu',
-                        help="Device to use for computation (cpu or cuda)")
     args = parser.parse_args()
     DatasetObjectMapper(cfg, args)
 
