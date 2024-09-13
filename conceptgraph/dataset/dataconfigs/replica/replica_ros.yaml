@@ -23,8 +23,8 @@ mapping:
   iters_first: 1500
   iters: 60
 camera_params:
-  image_height: 480
-  image_width: 640
+  image_height: 680
+  image_width: 1200
   fx: 600.0
   fy: 600.0
   cx: 599.5

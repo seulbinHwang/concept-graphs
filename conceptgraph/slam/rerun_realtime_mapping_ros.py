@@ -669,7 +669,7 @@ class RealtimeObjectMapperNode(Node):
 특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
     "이전 프레임의 카메라 위치"와 "현재 프레임의 카메라 위치"를 연결하는 경로를 시각적으로 나타냄
         """
-        self.prev_adjusted_pose = orr_log_camera(self.intrinsics, camera_pose,
+        self.prev_adjusted_pose = orr_log_camera(torch.from_numpy(self.intrinsics), camera_pose,
                                                  self.prev_adjusted_pose,
                                                  self.cfg.image_width,
                                                  self.cfg.image_height,

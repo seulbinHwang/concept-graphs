@@ -190,7 +190,7 @@ def main(cfg: DictConfig):
         det_exp_path.mkdir(parents=True, exist_ok=True)
 
         ## Initialize the detection models
-        detection_model = measure_time(YOLO)('yolov8l-world.pt')
+        detection_model = measure_time(YOLO)('yolov8x-worldv2.pt')
         sam_predictor = SAM(
             'sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
         # sam_predictor = measure_time(get_sam_predictor)(cfg) # Normal SAM
@@ -274,7 +274,7 @@ def main(cfg: DictConfig):
 
             ##### 1. [시작] RGBD에서 instance segmentation 진행
             results = detection_model.predict(color_path,
-                                              conf=0.1,
+                                              conf=cfg.mask_conf_threshold,
                                               verbose=False)
             confidences = results[0].boxes.conf.cpu().numpy()
             detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
@@ -494,7 +494,7 @@ def main(cfg: DictConfig):
             BG_CLASSES=obj_classes.get_bg_classes_arr(),
             mask_area_threshold=cfg.mask_area_threshold,
             max_bbox_area_ratio=cfg.max_bbox_area_ratio,
-            mask_conf_threshold=cfg.mask_conf_threshold,
+            mask_conf_threshold=None,
         )
         ##### 1.1. [끝] segmentation 결과 필터링
 
@@ -662,8 +662,6 @@ adjusted_pose.shape: (4, 4)
         for curr_map_edge in map_edges.edges_by_index.values():
             curr_obj1_idx = curr_map_edge.obj1_idx
             curr_obj2_idx = curr_map_edge.obj2_idx
-            obj1_class_name = objects[curr_obj1_idx]['class_name']
-            obj2_class_name = objects[curr_obj2_idx]['class_name']
             curr_first_detected = curr_map_edge.first_detected
             curr_num_det = curr_map_edge.num_detections
             if (frame_idx - curr_first_detected > 5) and curr_num_det < 2:

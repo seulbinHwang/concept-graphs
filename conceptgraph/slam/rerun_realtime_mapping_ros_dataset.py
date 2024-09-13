@@ -145,8 +145,11 @@ class DatasetObjectMapper:
             device="cpu",
             dtype=torch.float,
         )
+
         for frame_idx in trange(len(dataset)):
-            rgb_tensor, depth_tensor, intrinsics, *_ = dataset[frame_idx]
+            rgb_tensor, depth_tensor, intrinsics, *_ = dataset[frame_idx] # resized
+            self.intrinsics_torch = intrinsics
+            self.intrinsics = intrinsics.cpu().numpy()
             depth_tensor = depth_tensor[..., 0]  # (H, W)
             depth_array = depth_tensor.cpu().numpy()
             rgb_np = rgb_tensor.cpu().numpy()  # (H, W, 3)
@@ -160,6 +163,7 @@ class DatasetObjectMapper:
             camera_pose_ = camera_pose_.cpu().numpy()  # (4, 4)
 
             self.core_logic(bgr_np, depth_array, camera_pose=camera_pose_)
+        self.wrap_up()
 
     def ros2_init(self):
         self._target_frame = "vl"  #"vl" # child_frame_id:
@@ -456,7 +460,7 @@ class DatasetObjectMapper:
         depth_array, depth_builtin_time = self.depth_callback(depth_msg)
         self.core_logic(rgb_array, depth_array, depth_builtin_time)
 
-    def core_logic(self, rgb_array: np.ndarray, depth_array: np.ndarray,
+    def core_logic(self, bgr_np: np.ndarray, depth_array: np.ndarray,
                    depth_builtin_time: Optional[Time] = None,
                    camera_pose: Optional[np.ndarray] = None):
         color_path = None
@@ -500,7 +504,7 @@ class DatasetObjectMapper:
         if self.run_detections:
             ##### 1.1. [시작] RGBD에서 instance segmentation 진행
             results = self.detection_model.predict(
-                rgb_array, conf=self.cfg.mask_conf_threshold, verbose=False)
+                bgr_np, conf=self.cfg.mask_conf_threshold, verbose=False)
             confidences = results[0].boxes.conf.cpu().numpy()
             detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
                 int)  # (N,)
@@ -511,8 +515,6 @@ class DatasetObjectMapper:
                 for class_idx, class_id in enumerate(detection_class_ids)
             ]
             object_number = len(detection_class_ids)
-            print("object_number:", object_number)
-            print("detection_class_labels:", detection_class_labels)
             # 원본 size 기준으로 xyxy 가 나온다는 것을 확인함
             xyxy_tensor = results[0].boxes.xyxy
             xyxy_np = xyxy_tensor.cpu().numpy()  # (N, 4)
@@ -522,7 +524,7 @@ class DatasetObjectMapper:
             # UltraLytics SAM
             if xyxy_tensor.numel() != 0:
                 # segmentation
-                sam_out = self.sam_predictor.predict(rgb_array,
+                sam_out = self.sam_predictor.predict(bgr_np,
                                                      bboxes=xyxy_tensor,
                                                      verbose=False)
                 masks_tensor = sam_out[0].masks.data
@@ -530,7 +532,7 @@ class DatasetObjectMapper:
                 masks_np = masks_tensor.cpu().numpy()  # (N, H, W)
             else:
                 # color_tensor: (H, W, 3)
-                H, W, _ = rgb_array.shape
+                H, W, _ = bgr_np.shape
                 color_tensor = np.zeros((H, W, 3), dtype=np.uint8)
                 masks_np = np.empty((0, *color_tensor.shape[:2]),
                                     dtype=np.float64)
@@ -600,7 +602,7 @@ class DatasetObjectMapper:
 ]
             """
             labels, edges, _, captions = make_vlm_edges_and_captions(
-                rgb_array,
+                bgr_np,
                 curr_det,
                 self.obj_classes,
                 detection_class_labels,
@@ -626,9 +628,9 @@ class DatasetObjectMapper:
                 return
             ##### 1.3. [시작] 개별 objects에 대한 CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
-            rgb_array_ = cv2.cvtColor(rgb_array, cv2.COLOR_BGR2RGB)
+            rgb_np = cv2.cvtColor(bgr_np, cv2.COLOR_BGR2RGB)
             image_crops, image_feats, text_feats = compute_clip_features_batched(
-                rgb_array_, curr_det, self.clip_model,
+                rgb_np, curr_det, self.clip_model,
                 self.clip_preprocess, self.clip_tokenizer,
                 self.obj_classes.get_classes_arr(), self.cfg.device)
             ##### 1.3. [끝]
@@ -679,7 +681,7 @@ class DatasetObjectMapper:
                                  frame_name).with_suffix(".jpg")
                 # Visualize and save the annotated image
                 annotated_image, labels = vis_result_fast(
-                    rgb_array, curr_det, self.obj_classes.get_classes_arr())
+                    bgr_np, curr_det, self.obj_classes.get_classes_arr())
                 cv2.imwrite(str(vis_save_path), annotated_image)
                 depth_image_rgb = cv2.normalize(depth_array, None, 0, 255,
                                                 cv2.NORM_MINMAX)
@@ -703,7 +705,7 @@ class DatasetObjectMapper:
 특히, 카메라의 현재 위치와 자세(orientation)를 기록하고,
     "이전 프레임의 카메라 위치"와 "현재 프레임의 카메라 위치"를 연결하는 경로를 시각적으로 나타냄
         """
-        self.prev_adjusted_pose = orr_log_camera(self.intrinsics, camera_pose,
+        self.prev_adjusted_pose = orr_log_camera(torch.from_numpy(self.intrinsics), camera_pose,
                                                  self.prev_adjusted_pose,
                                                  self.cfg.image_width,
                                                  self.cfg.image_height,
@@ -736,7 +738,7 @@ class DatasetObjectMapper:
         image_rgb: (H, W, 3)
         """
         # CHECK: 아마 현재는 resize 가 필요 없어 보입니다.
-        # resized_grounded_obs = resize_gobs(raw_grounded_obs, rgb_array)
+        resized_grounded_obs = resize_gobs(raw_grounded_obs, bgr_np)
         resized_grounded_obs = raw_grounded_obs
         ##### 1.5. [시작]  프레임 내 segmentation 결과 필터링
         """
@@ -745,7 +747,7 @@ class DatasetObjectMapper:
         """
         filtered_grounded_obs = filter_gobs(
             resized_grounded_obs,
-            rgb_array,
+            rgb_np,
             skip_bg=self.cfg.skip_bg,
             # ["wall", "floor", "ceiling"]
             BG_CLASSES=self.obj_classes.get_bg_classes_arr(),
@@ -781,7 +783,7 @@ camera_pose.shape: (4, 4)
                 depth_array=depth_array,
                 masks=grounded_obs['mask'],
                 cam_K=self.intrinsics[:3, :3],  # Camera intrinsics
-                image_rgb=rgb_array_,
+                image_rgb=rgb_np,
                 trans_pose=camera_pose,
                 min_points_threshold=self.cfg.min_points_threshold,  # 16
                 # overlap # "iou", "giou", "overlap"
@@ -1240,7 +1242,7 @@ self.depth_dist_coeffs: [          0           0           0           0        
 
 @hydra.main(version_base=None,
             config_path="../hydra_configs/",
-            config_name="rerun_realtime_mapping_ros")
+            config_name="rerun_realtime_mapping")
 def main(cfg: DictConfig):
 
     parser = argparse.ArgumentParser(
