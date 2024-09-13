@@ -124,13 +124,41 @@ class DatasetObjectMapper:
 
     def __init__(self, cfg: DictConfig, args: argparse.Namespace):
         self.common_init(cfg, args)
-        self.dataset_init()
+        self.dataset_init(cfg)
 
-    def dataset_init(self):
+    def dataset_init(self, cfg: DictConfig):
         """
         1. pose / rgb / depth / intrinsics / extrinsics
         """
-        self.core_logic(bgr_image, depth_image, msg.header.stamp)
+        dataset = get_dataset(
+            # dataset/dataconfigs/replica/replica.yaml
+            dataconfig=cfg.dataset_config,
+            # Replica
+            basedir=cfg.dataset_root,
+            # room0
+            sequence=cfg.scene_id,
+            start=cfg.start,  # 0
+            end=cfg.end,  # -1
+            stride=cfg.stride,  # 50
+            desired_height=cfg.image_height,  # None # 680
+            desired_width=cfg.image_width,  # None # 1200
+            device="cpu",
+            dtype=torch.float,
+        )
+        for frame_idx in trange(len(dataset)):
+            rgb_tensor, depth_tensor, intrinsics, *_ = dataset[frame_idx]
+            depth_tensor = depth_tensor[..., 0]  # (H, W)
+            depth_array = depth_tensor.cpu().numpy()
+            rgb_np = rgb_tensor.cpu().numpy()  # (H, W, 3)
+            rgb_np = (rgb_np).astype(np.uint8)  # (H, W, 3)
+            bgr_np = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2BGR)  # (H, W, 3)
+            # Assert that bgr_np and depth_array are of the same shape.
+            assert bgr_np.shape[:2] == depth_array.shape
+
+            camera_pose_ = dataset.poses[frame_idx]
+            camera_pose_ = camera_pose_.cpu().numpy()  # (4, 4)
+
+            self.core_logic(bgr_np, depth_array, camera_pose=camera_pose_)
 
     def ros2_init(self):
         self._target_frame = "vl"  #"vl" # child_frame_id:
@@ -267,7 +295,7 @@ class DatasetObjectMapper:
     def rgbd_callback(self, msg: RGBD) -> None:
         # Extract RGB image from RGBD message
         rgb_image = self.convert_image_to_np(msg.rgb, "rgb8")
-        rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
+        bgr_np = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
         # Extract Depth image from RGBD message
         depth_image = self.convert_image_to_np(
             msg.depth, "16UC1") / 1000  # Assuming 16-bit depth
@@ -278,7 +306,7 @@ class DatasetObjectMapper:
         (self.intrinsics,
          self.depth_dist_coeffs) = self.depth_camera_info_callback(
              msg.depth_camera_info)
-        self.core_logic(rgb_image, depth_image, msg.header.stamp)
+        self.core_logic(bgr_np, depth_image, msg.header.stamp)
 
     def convert_image_to_np(self, img_msg: Image, encoding: str) -> np.ndarray:
         """Convert ROS Image message to numpy array using CvBridge."""
@@ -428,14 +456,14 @@ class DatasetObjectMapper:
         self.core_logic(rgb_array, depth_array, depth_builtin_time)
 
     def core_logic(self, rgb_array: np.ndarray, depth_array: np.ndarray,
-                   depth_builtin_time: Time):
+                   depth_builtin_time: Optional[Time] = None,
+                   camera_pose: Optional[np.ndarray] = None):
         color_path = None
         #### 1. frame 처리
         self.frame_idx += 1
-        TEST = False
-        if not TEST:
-            if self.intrinsics is None:
-                return
+        if self.intrinsics is None:
+            return
+        if camera_pose is None:
             agent_pose = self._get_pose_data(depth_builtin_time)
             if agent_pose is None:
                 return
