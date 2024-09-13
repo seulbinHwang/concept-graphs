@@ -120,12 +120,17 @@ clip_distance:=4.0
 """
 
 
-class RealtimeObjectMapperNode(Node):
+class DatasetObjectMapper:
 
     def __init__(self, cfg: DictConfig, args: argparse.Namespace):
-        super().__init__('ros2_bridge')
         self.common_init(cfg, args)
-        self.ros2_init()
+        self.dataset_init()
+
+    def dataset_init(self):
+        """
+        1. pose / rgb / depth / intrinsics / extrinsics
+        """
+        self.core_logic(bgr_image, depth_image, msg.header.stamp)
 
     def ros2_init(self):
         self._target_frame = "vl"  #"vl" # child_frame_id:
@@ -262,7 +267,7 @@ class RealtimeObjectMapperNode(Node):
     def rgbd_callback(self, msg: RGBD) -> None:
         # Extract RGB image from RGBD message
         rgb_image = self.convert_image_to_np(msg.rgb, "rgb8")
-        bgr_np = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
+        rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
         # Extract Depth image from RGBD message
         depth_image = self.convert_image_to_np(
             msg.depth, "16UC1") / 1000  # Assuming 16-bit depth
@@ -273,7 +278,7 @@ class RealtimeObjectMapperNode(Node):
         (self.intrinsics,
          self.depth_dist_coeffs) = self.depth_camera_info_callback(
              msg.depth_camera_info)
-        self.core_logic(bgr_np, depth_image, msg.header.stamp)
+        self.core_logic(rgb_image, depth_image, msg.header.stamp)
 
     def convert_image_to_np(self, img_msg: Image, encoding: str) -> np.ndarray:
         """Convert ROS Image message to numpy array using CvBridge."""
@@ -422,7 +427,7 @@ class RealtimeObjectMapperNode(Node):
         depth_array, depth_builtin_time = self.depth_callback(depth_msg)
         self.core_logic(rgb_array, depth_array, depth_builtin_time)
 
-    def core_logic(self, bgr_np: np.ndarray, depth_array: np.ndarray,
+    def core_logic(self, rgb_array: np.ndarray, depth_array: np.ndarray,
                    depth_builtin_time: Time):
         color_path = None
         #### 1. frame 처리
@@ -466,7 +471,7 @@ class RealtimeObjectMapperNode(Node):
         if self.run_detections:
             ##### 1.1. [시작] RGBD에서 instance segmentation 진행
             results = self.detection_model.predict(
-                bgr_np, conf=self.cfg.mask_conf_threshold, verbose=False)
+                rgb_array, conf=self.cfg.mask_conf_threshold, verbose=False)
             confidences = results[0].boxes.conf.cpu().numpy()
             detection_class_ids = results[0].boxes.cls.cpu().numpy().astype(
                 int)  # (N,)
@@ -488,7 +493,7 @@ class RealtimeObjectMapperNode(Node):
             # UltraLytics SAM
             if xyxy_tensor.numel() != 0:
                 # segmentation
-                sam_out = self.sam_predictor.predict(bgr_np,
+                sam_out = self.sam_predictor.predict(rgb_array,
                                                      bboxes=xyxy_tensor,
                                                      verbose=False)
                 masks_tensor = sam_out[0].masks.data
@@ -496,7 +501,7 @@ class RealtimeObjectMapperNode(Node):
                 masks_np = masks_tensor.cpu().numpy()  # (N, H, W)
             else:
                 # color_tensor: (H, W, 3)
-                H, W, _ = bgr_np.shape
+                H, W, _ = rgb_array.shape
                 color_tensor = np.zeros((H, W, 3), dtype=np.uint8)
                 masks_np = np.empty((0, *color_tensor.shape[:2]),
                                     dtype=np.float64)
@@ -566,7 +571,7 @@ class RealtimeObjectMapperNode(Node):
 ]
             """
             labels, edges, _, captions = make_vlm_edges_and_captions(
-                bgr_np,
+                rgb_array,
                 curr_det,
                 self.obj_classes,
                 detection_class_labels,
@@ -592,9 +597,9 @@ class RealtimeObjectMapperNode(Node):
                 return
             ##### 1.3. [시작] 개별 objects에 대한 CLIP feature를 계산
             # image_rgb: (H, W, 3) 원본 사이즈
-            rgb_np = cv2.cvtColor(bgr_np, cv2.COLOR_BGR2RGB)
+            rgb_array_ = cv2.cvtColor(rgb_array, cv2.COLOR_BGR2RGB)
             image_crops, image_feats, text_feats = compute_clip_features_batched(
-                rgb_np, curr_det, self.clip_model,
+                rgb_array_, curr_det, self.clip_model,
                 self.clip_preprocess, self.clip_tokenizer,
                 self.obj_classes.get_classes_arr(), self.cfg.device)
             ##### 1.3. [끝]
@@ -645,7 +650,7 @@ class RealtimeObjectMapperNode(Node):
                                  frame_name).with_suffix(".jpg")
                 # Visualize and save the annotated image
                 annotated_image, labels = vis_result_fast(
-                    bgr_np, curr_det, self.obj_classes.get_classes_arr())
+                    rgb_array, curr_det, self.obj_classes.get_classes_arr())
                 cv2.imwrite(str(vis_save_path), annotated_image)
                 depth_image_rgb = cv2.normalize(depth_array, None, 0, 255,
                                                 cv2.NORM_MINMAX)
@@ -702,7 +707,7 @@ class RealtimeObjectMapperNode(Node):
         image_rgb: (H, W, 3)
         """
         # CHECK: 아마 현재는 resize 가 필요 없어 보입니다.
-        # resized_grounded_obs = resize_gobs(raw_grounded_obs, bgr_np)
+        # resized_grounded_obs = resize_gobs(raw_grounded_obs, rgb_array)
         resized_grounded_obs = raw_grounded_obs
         ##### 1.5. [시작]  프레임 내 segmentation 결과 필터링
         """
@@ -711,7 +716,7 @@ class RealtimeObjectMapperNode(Node):
         """
         filtered_grounded_obs = filter_gobs(
             resized_grounded_obs,
-            rgb_np,
+            rgb_array,
             skip_bg=self.cfg.skip_bg,
             # ["wall", "floor", "ceiling"]
             BG_CLASSES=self.obj_classes.get_bg_classes_arr(),
@@ -747,7 +752,7 @@ camera_pose.shape: (4, 4)
                 depth_array=depth_array,
                 masks=grounded_obs['mask'],
                 cam_K=self.intrinsics[:3, :3],  # Camera intrinsics
-                image_rgb=rgb_np,
+                image_rgb=rgb_array_,
                 trans_pose=camera_pose,
                 min_points_threshold=self.cfg.min_points_threshold,  # 16
                 # overlap # "iou", "giou", "overlap"
@@ -1139,10 +1144,6 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
         # 메시지에서 이미지 데이터를 읽어서 OpenCV 이미지로 변환
         np_array = np.frombuffer(msg.data, np.uint8)
         rgb_array = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-        # visualize using skimage (GUI)
-
-
-
 
         # # publisher가 BGR 순서의 이미지를 보내고 있음.
         # # frombuffer를 사용하면,
@@ -1214,11 +1215,11 @@ self.depth_dist_coeffs: [          0           0           0           0        
 def main(cfg: DictConfig):
 
     parser = argparse.ArgumentParser(
-        description="RealtimeObjectMapperNode Node")
+        description="RealtimeHumanSegmenterNode Node")
     parser.add_argument('--realsense_idx',
                         type=int,
                         default=0,
-                        help="Robot ID for the RealtimeObjectMapperNode Node")
+                        help="Robot ID for the RealtimeHumanSegmenterNode Node")
     parser.add_argument('--use_world_model',
                         type=bool,
                         default=False,
@@ -1245,19 +1246,7 @@ def main(cfg: DictConfig):
                         default='cpu',
                         help="Device to use for computation (cpu or cuda)")
     args = parser.parse_args()
-
-    # ROS2 초기화
-    rclpy.init()
-    ros2_bridge = None
-    try:
-        ros2_bridge = RealtimeObjectMapperNode(cfg, args)
-        rclpy.spin(ros2_bridge)
-    except:
-        traceback.print_exc()
-        if ros2_bridge is not None:
-            ros2_bridge.wrap_up()
-            ros2_bridge.destroy_node()
-            rclpy.shutdown()
+    DatasetObjectMapper(cfg, args)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@ The script is used to model Grounded SAM detections in 3D, it assumes the tag2te
 
 # Standard library imports
 import os
-import copy
+import shutil
 import uuid
 import time
 from pathlib import Path
@@ -130,7 +130,18 @@ def main(cfg: DictConfig):
 
     objects = MapObjectList(device=cfg.device)
     map_edges = MapEdgeMapping(objects)
+    exp_path = "./Datasets/Replica/room0/exps"
+    if os.path.exists(exp_path):
+        user_input = input(
+            f"The folder {exp_path} already exists. Do you want to delete it? (y/n): "
+        ).strip().lower()
 
+        if user_input == 'y':
+            # 폴더 삭제
+            shutil.rmtree(exp_path)
+            print(f"The folder {exp_path} has been deleted.")
+        else:
+            print("The folder has not been deleted.")
     # # For visualization
     # if cfg.vis_render:
     #     # render a frame, if needed (not really used anymore since rerun)
@@ -231,20 +242,23 @@ def main(cfg: DictConfig):
         # color and depth tensors, and camera instrinsics matrix
         """
         color_path -> image_original_pil (PIL) # 필요 없음
-        color_path -> image_rgb (cv2)
-            - run_detections가 True일 때, 아래 image_rgb 를 대체
-        color_tensor: (680, 1200, 3) -> image_rgb: (680, 1200, 3) # resized
+        color_path -> rgb_np (cv2)
+            - run_detections가 True일 때, 아래 rgb_np 를 대체
+        rgb_tensor: (680, 1200, 3) -> rgb_np: (680, 1200, 3) # resized
         depth_tensor: (680, 1200, 1) -> depth_array: (680, 1200) # resized
         intrinsics: (4, 4)  # resize 가 들어간 것
         """
-        color_tensor, depth_tensor, intrinsics, *_ = dataset[frame_idx]
+        rgb_tensor, depth_tensor, intrinsics, *_ = dataset[frame_idx]
 
         # Covert to numpy and do some sanity checks
         depth_tensor = depth_tensor[..., 0]  # (H, W)
         depth_array = depth_tensor.cpu().numpy()
-        color_np = color_tensor.cpu().numpy()  # (H, W, 3)
-        image_rgb = (color_np).astype(np.uint8)  # (H, W, 3)
-        assert image_rgb.max() > 1, "Image is not in range [0, 255]"
+        rgb_np = rgb_tensor.cpu().numpy()  # (H, W, 3)
+        rgb_np = (rgb_np).astype(np.uint8)  # (H, W, 3)
+        assert rgb_np.max() > 1, "Image is not in range [0, 255]"
+        # imshow image_.
+        # 이미지 배열이 'image_array'에 저장되어 있다고 가정합니다.
+
 
         vis_save_path_for_vlm = get_vlm_annotated_image_path(
             det_exp_vis_path, color_path)
@@ -253,8 +267,8 @@ def main(cfg: DictConfig):
 
         if run_detections:
             # opencv can't read Path objects...
-            image = cv2.imread(str(color_path))  # This will in BGR color space
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # (H, W, 3)
+            bgr_image = cv2.imread(str(color_path))  # This will in BGR color space
+            rgb_np = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)  # (H, W, 3)
 
             # Do initial object detection (YOLO world)
 
@@ -285,7 +299,7 @@ def main(cfg: DictConfig):
 
                 masks_np = masks_tensor.cpu().numpy()  # (N, H, W)
             else:
-                masks_np = np.empty((0, *color_tensor.shape[:2]),
+                masks_np = np.empty((0, *rgb_tensor.shape[:2]),
                                     dtype=np.float64)
             # Create a detections object that we will save later.
             curr_det = sv.Detections(
@@ -328,7 +342,7 @@ def main(cfg: DictConfig):
             ##### 5. [시작] VLM을 통해 edge와 caption 정보를 구한다.
             ##### 논문과 다르게, 현 이미지 1장에 대한 edge와 node caption 정보를 구한다.
             labels, edges, edge_image, captions = make_vlm_edges_and_captions(
-                image, curr_det, obj_classes, detection_class_labels,
+                bgr_image, curr_det, obj_classes, detection_class_labels,
                 det_exp_vis_path, color_path, cfg.make_edges, openai_client)
             del edge_image
             ##### 5. [끝] VLM을 통해 edge와 caption 정보를 구한다.
@@ -341,9 +355,9 @@ def main(cfg: DictConfig):
             - 빈 리스트
             """
             ##### 2. [시작] CLIP feature를 계산
-            # image_rgb: (H, W, 3) 원본 사이즈
+            # rgb_np: (H, W, 3) 원본 사이즈
             image_crops, image_feats, text_feats = compute_clip_features_batched(
-                image_rgb, curr_det, clip_model, clip_preprocess,
+                rgb_np, curr_det, clip_model, clip_preprocess,
                 clip_tokenizer, obj_classes.get_classes_arr(), cfg.device)
             ##### 2. [끝] CLIP feature를 계산
 
@@ -386,9 +400,9 @@ def main(cfg: DictConfig):
                 """
                 vis_save_path = (det_exp_vis_path /
                                  color_path.name).with_suffix(".jpg")
-                # Visualize and save the annotated image
+                # Visualize and save the annotated bgr_image
                 annotated_image, labels = vis_result_fast(
-                    image, curr_det, obj_classes.get_classes_arr())
+                    bgr_image, curr_det, obj_classes.get_classes_arr())
                 cv2.imwrite(str(vis_save_path), annotated_image)
                 depth_image_rgb = cv2.normalize(depth_array, None, 0, 255,
                                                 cv2.NORM_MINMAX)
@@ -458,9 +472,9 @@ def main(cfg: DictConfig):
                 "edges": edges,  # len = 0
                 "captions": captions,  # len = 0
             }
-        image_rgb: (H, W, 3)
+        rgb_np: (H, W, 3)
         """
-        resized_grounded_obs = resize_gobs(raw_grounded_obs, image_rgb)
+        resized_grounded_obs = resize_gobs(raw_grounded_obs, rgb_np)
         ##### 1.1. [시작] segmentation 결과 필터링
         """
 2. **필터링 기준 설정**:
@@ -475,7 +489,7 @@ def main(cfg: DictConfig):
         """
         filtered_grounded_obs = filter_gobs(
             resized_grounded_obs,
-            image_rgb,
+            rgb_np,
             skip_bg=cfg.skip_bg,
             BG_CLASSES=obj_classes.get_bg_classes_arr(),
             mask_area_threshold=cfg.mask_area_threshold,
@@ -497,7 +511,7 @@ def main(cfg: DictConfig):
 depth_array.shape: (680, 1200)
 grounded_obs['mask'].shape: (N, 680, 1200)
 intrinsics.cpu().numpy()[:3, :3].shape: (3, 3)
-image_rgb.shape: (680, 1200, 3)
+rgb_np.shape: (680, 1200, 3)
 adjusted_pose.shape: (4, 4)
         """
         ##### 3. [시작] pointclouds 만들기
@@ -507,7 +521,7 @@ adjusted_pose.shape: (4, 4)
                 depth_array=depth_array,
                 masks=grounded_obs['mask'],
                 cam_K=intrinsics.cpu().numpy()[:3, :3],  # Camera intrinsics
-                image_rgb=image_rgb,  # None 으로 해도 됨 (pointcloud 색깔 구하려는 것)
+                image_rgb=rgb_np,  # None 으로 해도 됨 (pointcloud 색깔 구하려는 것)
                 trans_pose=adjusted_pose,
                 min_points_threshold=cfg.min_points_threshold,  # 16
                 # overlap # "iou", "giou", "overlap"

@@ -1,61 +1,58 @@
-import rclpy
-from rclpy.node import Node
+from PIL import Image
 import numpy as np
-from sensor_msgs.msg import Image
-from realsense2_camera_msgs.msg import RGBD
-from cv_bridge import CvBridge
-from typing import Optional
+
+# 이미지 파일 경로
+image_path = 'frame000000.jpg'
+
+# 이미지 열기
+image = Image.open(image_path)
+
+# 이미지 데이터를 numpy 배열로 변환
+image_pil = np.array(image)
+
+import cv2
+import numpy as np
 
 
-class RGBDSubscriber(Node):
-    def __init__(self) -> None:
-        super().__init__('rgbd_subscriber')
-
-        # ROS2 Subscription to the RGBD topic
-        self.subscription = self.create_subscription(
-            RGBD,
-            '/robot0/realsense0/rgbd',  # 토픽 이름을 launch 파일에 맞게 수정
-            self.rgbd_callback,
-            10)
-
-        # CvBridge for converting ROS images to OpenCV/numpy format
-        self.bridge = CvBridge()
-
-        # To store the rgb and depth images
-        self.rgb_image: Optional[np.ndarray] = None
-        self.depth_image: Optional[np.ndarray] = None
-
-    def rgbd_callback(self, msg: RGBD) -> None:
-        # Extract RGB image from RGBD message
-        self.rgb_image = self.convert_image_to_np(msg.rgb, "rgb8")
-        self.get_logger().info('RGB Image received.')
-
-        # Extract Depth image from RGBD message
-        self.depth_image = self.convert_image_to_np(msg.depth, "16UC1")  # Assuming 16-bit depth
-        self.get_logger().info('Depth Image received.')
-
-    def convert_image_to_np(self, img_msg: Image, encoding: str) -> np.ndarray:
-        """Convert ROS Image message to numpy array using CvBridge."""
-        try:
-            # Use cv_bridge to convert to numpy array
-            np_image = self.bridge.imgmsg_to_cv2(img_msg, encoding)
-            return np_image
-        except Exception as e:
-            self.get_logger().error(f"Failed to convert image: {str(e)}")
-            return np.array([])  # Return empty array on failure
+# 이미지 읽기 (BGR 순서로 읽힘)
+image_cv2 = cv2.imread(image_path)
 
 
-def main(args=None) -> None:
-    rclpy.init(args=args)
 
-    # Initialize node and start spinning
-    rgbd_subscriber = RGBDSubscriber()
-    rclpy.spin(rgbd_subscriber)
-
-    # Shutdown on exit
-    rgbd_subscriber.destroy_node()
-    rclpy.shutdown()
+import matplotlib.pyplot as plt
+import numpy as np
 
 
-if __name__ == '__main__':
-    main()
+# 이미지 읽기 (RGB 순서로 읽힘)
+image = plt.imread(image_path)
+
+# numpy 배열로 이미지를 가져옴
+image_plt = np.array(image)
+
+import imageio.v2 as imageio  # imageio 버전에 따라 v2 모듈을 사용할 수 있습니다.
+import numpy as np
+
+
+# 이미지 읽기 (RGB 순서로 읽힘)
+image = imageio.imread(image_path)
+
+# numpy 배열로 이미지를 가져옴
+image_imageio= np.array(image)
+
+from skimage import io
+import numpy as np
+
+
+# 이미지 읽기 (RGB 순서로 읽힘)
+image = io.imread(image_path)
+
+# numpy 배열로 이미지를 가져옴
+image_skimage = np.array(image)
+
+
+import cv2
+# show 5 images in a row
+stacked_images = np.hstack([image_cv2, image_pil, image_plt, image_imageio, image_skimage])
+cv2.imshow('5 images', stacked_images)
+cv2.waitKey(0)
+
