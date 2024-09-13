@@ -124,21 +124,48 @@ class RealtimeHumanSegmenterNode(Node):
 
     def __init__(self, cfg: DictConfig, args: argparse.Namespace):
         super().__init__('ros2_bridge')
-        self.cfg = cfg  # 1726064477.905918701 # rgbd
-        self.args = args  # 1726064478.36382000 # tf
+        self.common_init(cfg, args)
+        self.ros2_init()
+
+    def ros2_init(self):
         self._target_frame = "vl"  #"vl" # child_frame_id:
         self._source_frame = "base_link"  # frame_id:
+        ###################################
+        self._tf_buffer = Buffer()
+        self._tf_listener = TransformListener(self._tf_buffer, self)
+        self.bridge = CvBridge()
+        # To store the rgb and depth images
+        self.rgb_image: Optional[np.ndarray] = None
+        self.depth_image: Optional[np.ndarray] = None
+        self.builtin_time = None
+        self.color_camera_matrix = None
+        self.color_dist_coeffs = None
+        self.intrinsics = None
+        self.depth_dist_coeffs = None
+        self.subscription = self.create_subscription(
+            RGBD,
+            '/robot0/realsense0/rgbd',  # 토픽 이름을 launch 파일에 맞게 수정
+            self.rgbd_callback,
+            10)
 
+        # self._set_rgbd_info_subscribers()
+        # self._set_rgbd_subscribers()
+
+    def common_init(self, cfg: DictConfig, args: argparse.Namespace):
+
+        self.cfg = cfg
+        self.args = args
+        self.extrinsic = self._set_extrinsic()
         # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
         self.tracker = MappingTracker()
         # 만약 Rerun이 설치되어 있지 않거나, 사용하지 않는 경우, 이 변수는 None입니다.
         self.orr = OptionalReRun()
-        self.orr.set_use_rerun(cfg.use_rerun)  # True
+        self.orr.set_use_rerun(self.cfg.use_rerun)  # True
         self.orr.init("realtime_mapping")
         self.orr.spawn()
 
-        cfg = process_cfg(cfg)
-        self.objects = MapObjectList(device=args.device)
+        self.cfg = process_cfg(self.cfg)
+        self.objects = MapObjectList(device=self.args.device)
         self.map_edges = MapEdgeMapping(self.objects)
 
         # output folder for this mapping experiment
@@ -159,18 +186,19 @@ class RealtimeHumanSegmenterNode(Node):
             else:
                 print("The folder has not been deleted.")
 
-        self.exp_out_path = get_exp_out_path(cfg.dataset_root, cfg.scene_id,
-                                             cfg.exp_suffix)
+        self.exp_out_path = get_exp_out_path(self.cfg.dataset_root,
+                                             self.cfg.scene_id,
+                                             self.cfg.exp_suffix)
 
         # output folder of the detections experiment to use
         # det_exp_path: Datasets/Replica/room0/exps/s_detections_stride10
-        self.det_exp_path = get_exp_out_path(cfg.dataset_root,
-                                             cfg.scene_id,
-                                             cfg.detections_exp_suffix,
+        self.det_exp_path = get_exp_out_path(self.cfg.dataset_root,
+                                             self.cfg.scene_id,
+                                             self.cfg.detections_exp_suffix,
                                              make_dir=False)
 
         # we need to make sure to use the same classes as the ones used in the detections
-        detections_exp_cfg = cfg_to_dict(cfg)
+        detections_exp_cfg = cfg_to_dict(self.cfg)
         # obj_classes 에서 person 제외했음
         self.obj_classes = ObjectClasses(
             classes_file_path=detections_exp_cfg['classes_file'],
@@ -181,7 +209,7 @@ class RealtimeHumanSegmenterNode(Node):
         # det_exp_path:
         # concept-graphs/Datasets/Replica/room0/exps/s_detections_stride10
         # check_run_detections: s_detections_stride10 폴더가 있으면 실시하지 않음
-        self.run_detections = check_run_detections(cfg.force_detection,
+        self.run_detections = check_run_detections(self.cfg.force_detection,
                                                    self.det_exp_path)
         self.run_detections = True
         # det_exp_pkl_path: exps/s_detections_stride10/detections
@@ -202,7 +230,7 @@ class RealtimeHumanSegmenterNode(Node):
             (self.clip_model, _,
              self.clip_preprocess) = open_clip.create_model_and_transforms(
                  "ViT-H-14", "laion2b_s32b_b79k")
-            self.clip_model = self.clip_model.to(cfg.device)
+            self.clip_model = self.clip_model.to(self.cfg.device)
             self.clip_tokenizer = open_clip.get_tokenizer("ViT-H-14")
 
             # Set the classes for the detection model
@@ -215,55 +243,23 @@ class RealtimeHumanSegmenterNode(Node):
         else:
             print("\n".join(["NOT Running detections..."] * 10))
 
-        save_hydra_config(cfg, self.exp_out_path)
+        save_hydra_config(self.cfg, self.exp_out_path)
         save_hydra_config(detections_exp_cfg,
                           self.exp_out_path,
                           is_detection_config=True)
 
-        if cfg.save_objects_all_frames:
+        if self.cfg.save_objects_all_frames:
             # exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
             # obj_all_frames_out_path: room0/exps/r_mapping_stride10/saved_obj_all_frames/det_s_detections_stride10
-            self.obj_all_frames_out_path = (self.exp_out_path /
-                                            "saved_obj_all_frames" /
-                                            f"det_{cfg.detections_exp_suffix}")
+            self.obj_all_frames_out_path = (
+                self.exp_out_path / "saved_obj_all_frames" /
+                f"det_{self.cfg.detections_exp_suffix}")
             os.makedirs(self.obj_all_frames_out_path, exist_ok=True)
 
         self.counter = 0
-        ###################################
         self.frame_idx = -1
-        self._tf_buffer = Buffer()
-        self._tf_listener = TransformListener(self._tf_buffer, self)
-        self._frame_idx = 0
-        self.extrinsic = self._set_extrinsic()
-        # bbox_2d_topic = \
-        #     f"realsense{self.args.realsense_idx}/bounding_boxes_2d"
-        # self.bounding_boxes_pub = self.create_publisher(BoundingBox2DArray,
-        #                                                 bbox_2d_topic, 10)
-
-        # 추가
-        # CvBridge for converting ROS images to OpenCV/numpy format
-        self.bridge = CvBridge()
-
-        # To store the rgb and depth images
-        self.rgb_image: Optional[np.ndarray] = None
-        self.depth_image: Optional[np.ndarray] = None
-        self.builtin_time = None
-
-        self.color_camera_matrix = None
-        self.color_dist_coeffs = None
-        self.intrinsics = None
-        self.depth_dist_coeffs = None
-        self.subscription = self.create_subscription(
-            RGBD,
-            '/robot0/realsense0/rgbd',  # 토픽 이름을 launch 파일에 맞게 수정
-            self.rgbd_callback,
-            10)
-
-        # self._set_rgbd_info_subscribers()
-        # self._set_rgbd_subscribers()
 
     def rgbd_callback(self, msg: RGBD) -> None:
-        print("----------------start--------------------------------")
         # Extract RGB image from RGBD message
         rgb_image = self.convert_image_to_np(msg.rgb, "rgb8")
         rgb_image = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
@@ -271,16 +267,13 @@ class RealtimeHumanSegmenterNode(Node):
         depth_image = self.convert_image_to_np(
             msg.depth, "16UC1") / 1000  # Assuming 16-bit depth
         # Print the maximum depth value
-        builtin_time = msg.header.stamp
-        time_sec = builtin_time.sec + builtin_time.nanosec * 1e-9
         (self.color_camera_matrix,
          self.color_dist_coeffs) = self.color_camera_info_callback(
              msg.rgb_camera_info)
         (self.intrinsics,
          self.depth_dist_coeffs) = self.depth_camera_info_callback(
              msg.depth_camera_info)
-        self.core_logic(rgb_image, depth_image, builtin_time)
-        print("----------------end--------------------------------")
+        self.core_logic(rgb_image, depth_image, msg.header.stamp)
 
     def convert_image_to_np(self, img_msg: Image, encoding: str) -> np.ndarray:
         """Convert ROS Image message to numpy array using CvBridge."""
@@ -1189,10 +1182,8 @@ self.intrinsics: (240, 424)
         """
         # TODO: 나중에 지워야 함
         self.intrinsics = camera_matrix
-        self.intrinsics = np.array([[377.81, 0, 318.96],
-                          [0, 377.81, 240.15],
-                          [0, 0, 1]])
-
+        self.intrinsics = np.array([[377.81, 0, 318.96], [0, 377.81, 240.15],
+                                    [0, 0, 1]])
         """
 self.depth_dist_coeffs: [          0           0           0           0           0]
         """
