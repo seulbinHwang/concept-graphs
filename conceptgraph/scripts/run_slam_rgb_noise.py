@@ -132,7 +132,7 @@ scene_id : $SCENE_NAME
 
 
     #     rgbdimages = RGBDImages(colors, depths, intrinsics, poses, channels_first=False)
-    slam = PointFusion(odom="gradicp", dsratio=4, device=args.device)
+    slam = PointFusion(odom="gradicp", dsratio=10, device=args.device)
     #     pointclouds, recovered_poses = slam(rgbdimages)
 
     """ Pointclouds
@@ -162,20 +162,15 @@ scene_id : $SCENE_NAME
     avg_fixed_minus_gt_deg = np.zeros(6)
     avg_noise_deg = np.zeros(6)
     for idx in trange(len(dataset)):
-        if load_embeddings:
-            _color, _depth, intrinsics, _pose, _embedding = dataset[idx]
-            _embedding = _embedding.unsqueeze(0).half()
-            _confidence = torch.ones_like(_embedding)
-        else:
-            _color, _depth, intrinsics, _pose = dataset[idx]
-            """
-            _color: (480, 640, 3)
-            _depth: (480, 640, 1)
-            intrinsics: (4, 4)
-            _pose: (4, 4)
-            """
-            _embedding = None
-            _confidence = None
+        _color, _depth, intrinsics, _pose = dataset[idx]
+        """
+        _color: (480, 640, 3)
+        _depth: (480, 640, 1)
+        intrinsics: (4, 4)
+        _pose: (4, 4)
+        """
+        _embedding = None
+        _confidence = None
 
         pose_np_gt = _pose.cpu().numpy()
         pose_flat_deg_np_gt = general_utils.extract_xyz_rpw(pose_np_gt)
@@ -205,8 +200,6 @@ scene_id : $SCENE_NAME
         pose_noise_tensor = torch.from_numpy(pose_noise_np).to(_pose.device).to(_pose.dtype)  # (4, 4)
 
 
-
-
         frame_cur = RGBDImages(
             rgb_image=_color.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 3)
             depth_image=_depth.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 1)
@@ -216,7 +209,7 @@ scene_id : $SCENE_NAME
             confidence_image=_confidence,  # None
         )
 
-        pointclouds, recovered_poses = slam.step(pointclouds, live_frame=frame_cur, prev_frame=frame_prev, use_current_pose=True)
+        pointclouds, recovered_poses = slam.step(pointclouds, live_frame=frame_cur, prev_frame=frame_prev, inplace=True, use_current_pose=True)
         recovered_pose_np = recovered_poses.cpu().numpy().squeeze()
         recovered_pose_flat_deg_np = general_utils.extract_xyz_rpw(recovered_pose_np)
         print("[start]--------------")
