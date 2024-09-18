@@ -17,7 +17,7 @@ import cv2
 import re
 import open3d as o3d
 from typing import Union
-
+import open3d.core as o3c
 from omegaconf import OmegaConf
 import torch
 import numpy as np
@@ -26,6 +26,18 @@ import numpy as np
 from typing import Tuple
 
 
+def load_poses(traj_path, n_files):
+    poses = []
+    with open(traj_path, "r") as f:
+        lines = f.readlines()
+    for i in range(n_files):
+        line = lines[i]
+        c2w = np.array(list(map(float, line.split()))).reshape(4, 4)
+        # c2w[:3, 1] *= -1
+        # c2w[:3, 2] *= -1
+        # c2w = torch.from_numpy(c2w).float()
+        poses.append(c2w)
+    return poses
 
 def extract_rotation_translation(T: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """
@@ -139,6 +151,39 @@ def xyz_rpw_to_transformation_matrix(xyz_rpw: np.ndarray) -> np.ndarray:
 
     return T
 
+def get_noise(max_xyz_noise: float = 0.1,
+              max_angle_noise_deg: float = 10) -> Tuple[np.ndarray, np.ndarray]:
+    # 표준편차 계산 (95% 확률로 노이즈가 범위 내에 있음)
+    xyz_noise_std = max_xyz_noise / 1.96
+    angle_noise_std_deg = max_angle_noise_deg / 1.96
+    angle_noise_std_rad = np.deg2rad(angle_noise_std_deg)
+    xyz_noise = np.random.normal(0, xyz_noise_std, size=3)
+    rpy_noise = np.random.normal(0, angle_noise_std_rad, size=3)
+
+    return xyz_noise, rpy_noise
+
+
+def set_noise(xyz_noise: np.ndarray, rpy_noise: np.ndarray, _pose: torch.Tensor,
+              pose_flat_deg_np_gt: np.ndarray,
+              avg_noise_deg: np.ndarray) -> torch.Tensor:
+
+    # For logging. (avg_noise_deg)
+    rpy_noise_deg = np.rad2deg(rpy_noise)
+    noise_flat_deg = np.abs(np.concatenate([xyz_noise, rpy_noise_deg]))
+    avg_noise_deg += noise_flat_deg
+
+    # 노이즈를 _pose( -> pose_flat_rad_np_gt) 에 주입 -> pose_flat_rad_np_noisy (-> pose_noise_tensor)
+    pose_flat_rad_np_gt = pose_flat_deg_np_gt.copy()
+    pose_flat_rad_np_gt[3:] = np.deg2rad(pose_flat_deg_np_gt[3:])
+    pose_flat_rad_np_noisy = pose_flat_rad_np_gt.copy()  # 원본 데이터를 보존하기 위해 복사
+    pose_flat_rad_np_noisy[:3] += xyz_noise  # x, y, z에 노이즈 추가
+    pose_flat_rad_np_noisy[3:] += rpy_noise  # roll, pitch, yaw에 노이즈 추가
+    pose_flat_deg_np_noisy = pose_flat_rad_np_noisy.copy()
+    pose_flat_deg_np_noisy[3:] = np.rad2deg(pose_flat_rad_np_noisy[3:])
+    pose_noise_np = xyz_rpw_to_transformation_matrix(pose_flat_rad_np_noisy)
+    pose_noise_tensor = o3c.Tensor(pose_noise_np)
+    return pose_noise_tensor
+
 
 
 def get_bb_center(bbox: Union[o3d.geometry.OrientedBoundingBox,
@@ -170,6 +215,7 @@ def get_bb_R(bbox: Union[o3d.geometry.OrientedBoundingBox,
         return bbox.R
     elif isinstance(bbox, o3d.geometry.AxisAlignedBoundingBox):
         return np.eye(3)
+
 
 
 class Timer:

@@ -6,10 +6,11 @@ os.environ['TORCH_USE_CUDA_DSA'] = '1'
 from pathlib import Path
 import numpy as np
 import torch
+
 torch.autograd.set_detect_anomaly(True)
 import torch.nn.functional as F
 from tqdm import trange
-
+from typing import Tuple
 import open3d as o3d
 
 from conceptgraph.dataset.datasets_common import get_dataset
@@ -53,6 +54,7 @@ def get_parser() -> argparse.ArgumentParser:
         help="Load GT semantic segmentation and run fusion on them. ")
 
     return parser
+
 
 
 
@@ -130,11 +132,9 @@ scene_id : $SCENE_NAME
     - valid_depth_mask
     """
 
-
     #     rgbdimages = RGBDImages(colors, depths, intrinsics, poses, channels_first=False)
-    slam = PointFusion(odom="gradicp", dsratio=10, device=args.device)
+    slam = PointFusion(odom="gradicp", dsratio=4, device=args.device)
     #     pointclouds, recovered_poses = slam(rgbdimages)
-
     """ Pointclouds
     - points / normals / colors / confidences 
     - 변환 / 스케일링 / 오프셋 추가 / 핀홀 프로젝션
@@ -149,16 +149,7 @@ scene_id : $SCENE_NAME
     """
     # 랜덤 넘버 생성기의 시드를 설정하여 재현성 확보
     np.random.seed(42)
-    ##########################################
-    # 최대 노이즈 수준을 변수로 정의합니다.
-    max_xyz_noise = 0.1  # 위치 노이즈 최대값 (단위: 미터)
-    max_angle_noise_deg = 10  # 각도 노이즈 최대값 (단위: 도)
-    max_angle_noise_rad = np.deg2rad(max_angle_noise_deg)
-    # 표준편차 계산 (95% 확률로 노이즈가 범위 내에 있음)
-    xyz_noise_std = max_xyz_noise / 1.96
-    angle_noise_std_deg = max_angle_noise_deg / 1.96
-    angle_noise_std_rad = np.deg2rad(angle_noise_std_deg)
-    ##########################################
+
     avg_fixed_minus_gt_deg = np.zeros(6)
     avg_noise_deg = np.zeros(6)
     for idx in trange(len(dataset)):
@@ -172,33 +163,13 @@ scene_id : $SCENE_NAME
         _embedding = None
         _confidence = None
 
+        ############### 노이즈 추가 ###############
+        xyz_noise, angle_noise = general_utils.get_noise()
         pose_np_gt = _pose.cpu().numpy()
         pose_flat_deg_np_gt = general_utils.extract_xyz_rpw(pose_np_gt)
-        pose_flat_rad_np_gt = pose_flat_deg_np_gt.copy()
-        pose_flat_rad_np_gt[3:] = np.deg2rad(pose_flat_deg_np_gt[3:])
-
-        ############### 노이즈 추가 ###############
-        # 위치 노이즈 생성 (가우시안 분포, 평균 0, 표준편차 xyz_noise_std)
-        xyz_noise = np.random.normal(0, xyz_noise_std, size=3)
-
-        # 각도 노이즈 생성 (가우시안 분포, 평균 0, 표준편차 angle_noise_std_rad)
-        rpy_noise = np.random.normal(0, angle_noise_std_rad, size=3)
-        rpy_noise_deg = np.rad2deg(rpy_noise)
-        noise_flat_deg = np.abs(np.concatenate([xyz_noise, rpy_noise_deg]))
-
-        avg_noise_deg += noise_flat_deg
-
-        # 노이즈를 pose_flat_np_gt에 주입
-        pose_flat_rad_np_noisy = pose_flat_rad_np_gt.copy()  # 원본 데이터를 보존하기 위해 복사
-        pose_flat_rad_np_noisy[:3] += xyz_noise  # x, y, z에 노이즈 추가
-        pose_flat_rad_np_noisy[3:] += rpy_noise  # roll, pitch, yaw에 노이즈 추가
-        pose_flat_deg_np_noisy = pose_flat_rad_np_noisy.copy()
-        pose_flat_deg_np_noisy[3:] = np.rad2deg(pose_flat_rad_np_noisy[3:])
-
+        pose_noise_tensor = general_utils.set_noise(xyz_noise, angle_noise, _pose,
+                                       pose_flat_deg_np_gt, avg_noise_deg)
         ##########################################
-        pose_noise_np = general_utils.xyz_rpw_to_transformation_matrix(pose_flat_rad_np_noisy)
-        pose_noise_tensor = torch.from_numpy(pose_noise_np).to(_pose.device).to(_pose.dtype)  # (4, 4)
-
 
         frame_cur = RGBDImages(
             rgb_image=_color.unsqueeze(0).unsqueeze(0),  # (1, 1, 480, 640, 3)
@@ -209,21 +180,22 @@ scene_id : $SCENE_NAME
             confidence_image=_confidence,  # None
         )
 
-        pointclouds, recovered_poses = slam.step(pointclouds, live_frame=frame_cur, prev_frame=frame_prev, inplace=True, use_current_pose=True)
+        pointclouds, recovered_poses = slam.step(pointclouds,
+                                                 live_frame=frame_cur,
+                                                 prev_frame=frame_prev,
+                                                 inplace=True,
+                                                 use_current_pose=True)
         recovered_pose_np = recovered_poses.cpu().numpy().squeeze()
-        recovered_pose_flat_deg_np = general_utils.extract_xyz_rpw(recovered_pose_np)
-        print("[start]--------------")
-        print("pose_flat_deg_np_noisy: ", np.round(pose_flat_deg_np_noisy, 2))
-        print("pose_flat_deg_np_gt: ", np.round(pose_flat_deg_np_gt, 2))
-        print("recovered_pose_flat_deg_np: ", np.round(recovered_pose_flat_deg_np, 2))
-        fixed_minus_gt_deg = np.abs(recovered_pose_flat_deg_np - pose_flat_deg_np_gt)
+        ################# For logging. (avg_fixed_minus_gt_deg)
+        recovered_pose_flat_deg_np = general_utils.extract_xyz_rpw(
+            recovered_pose_np)
+        fixed_minus_gt_deg = np.abs(recovered_pose_flat_deg_np -
+                                    pose_flat_deg_np_gt)
         avg_fixed_minus_gt_deg += fixed_minus_gt_deg
-        print("noise_flat_deg: ", np.round(noise_flat_deg, 2))
-        print("fixed_minus_gt_deg: ", np.round(fixed_minus_gt_deg, 2))
-        print("[end]--------------")
+        ##################
 
 
-        frame_prev = frame_cur # Keep it None when we use the gt odom
+        frame_prev = frame_cur  # Keep it None when we use the gt odom
         torch.cuda.empty_cache()
     avg_fixed_minus_gt_deg /= len(dataset)
     avg_noise_deg /= len(dataset)

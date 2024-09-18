@@ -8,6 +8,7 @@ import pickle
 import numpy as np
 import open3d as o3d
 import pandas as pd
+from typing import List
 
 import torch
 
@@ -57,15 +58,14 @@ def get_parser():
 
 
 def eval_replica(
-        scene_id: str,
-        scene_id_: str,
-        class_names: List{str],
-        class_feats: torch.Tensor,
-        args: argparse.Namespace,
-        class_all2existing: torch.Tensor,
-        ignore_index=[],
-        gt_class_only:
-    bool = True,  # only compute the conf matrix for the GT classes
+    scene_id: str,
+    scene_id_: str,
+    class_names: List[str],
+    class_feats: torch.Tensor,
+    args: argparse.Namespace,
+    class_all2existing: torch.Tensor,
+    ignore_index=[],
+    gt_class_only: bool = True  # only compute the conf matrix for the GT classes
 ):
     class2color = get_random_colors(len(class_names))
     '''Load the GT point cloud'''
