@@ -1,7 +1,34 @@
-'''
-The script is used to model Grounded SAM detections in 3D, it assumes the tag2text classes are avaialable. It also assumes the dataset has Clip features saved for each object/mask.
-'''
+# ----------------------------------------------------------------------------
+# -                        Open3D: www.open3d.org                            -
+# ----------------------------------------------------------------------------
+# Copyright (c) 2018-2023 www.open3d.org
+# SPDX-License-Identifier: MIT
+# ----------------------------------------------------------------------------
 
+# examples/python/t_reconstruction_system/dense_slam_gui.py
+
+# P.S. This example is used in documentation, so, please ensure the changes are
+# synchronized.
+# "pip install numpy==1.24.3" to avoid "Segmentation Fault" error
+
+import open3d as o3d
+import open3d.core as o3c
+import open3d.visualization.gui as gui
+import open3d.visualization.rendering as rendering
+import hydra
+from conceptgraph.utils.config import ConfigParser
+from conceptgraph.dataset import conceptgraphs_datautils
+
+import os
+import numpy as np
+import threading
+import time
+from omegaconf import DictConfig
+import argparse
+from conceptgraph.utils.common import load_rgbd_file_names, save_poses, load_intrinsic, extract_trianglemesh, get_default_dataset, extract_rgbd_frames
+from conceptgraph.utils import general_utils
+
+###################
 # Standard library imports
 import shutil
 import pickle
@@ -18,7 +45,6 @@ import open_clip
 from ultralytics import YOLO, SAM
 import supervision as sv
 from collections import Counter
-from builtin_interfaces.msg import Time
 # Local application/library specific imports
 from conceptgraph.utils.optional_rerun_wrapper import (
     OptionalReRun, orr_log_camera, orr_log_depth_image,
@@ -50,24 +76,12 @@ from conceptgraph.slam.mapping import (compute_spatial_similarities,
                                        merge_obj_matches)
 from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
-import tf_transformations
-import message_filters
-from sensor_msgs.msg import CompressedImage, CameraInfo
 import cv2
 from typing import Tuple, List, Dict, Any, Union, Optional
-from tf2_ros.buffer import Buffer
-from tf2_ros.transform_listener import TransformListener
-from geometry_msgs.msg import TransformStamped
 import argparse
-from tf2_ros import (ConnectivityException, ExtrapolationException,
-                     LookupException)
 from scipy.spatial.transform import Rotation as R
 import os
 import numpy as np
-from sensor_msgs.msg import Image
-from realsense2_camera_msgs.msg import RGBD
-from cv_bridge import CvBridge
-
 
 # Disable torch gradient computation
 torch.set_grad_enabled(False)
@@ -77,46 +91,18 @@ RUN_MIDDLE = False
 RUN_AFTER = False
 
 
-"""
-python -m conceptgraph.slam.rerun_realtime_mapping
-"""
-"""
-ros2 bag record -o 09112312 /odom /odom_wio /robot0/realsense0/aligned_depth_to_color/camera_info /robot0/realsense0/aligned_depth_to_color/image_raw /robot0/realsense0/color/camera_info /robot0/realsense0/color/image_raw /robot0/realsense0/color/metadata /robot0/realsense0/depth/camera_info /robot0/realsense0/depth/image_rect_raw /robot0/realsense0/depth/metadata /robot0/realsense0/extrinsics/depth_to_color /robot0/realsense0/rgbd /tf /tf_static  /vl /vl/opt /vl/opt/pose_with_covariance /vl/pose_with_covariance
-
-ros2 bag record -o 09112321 /odom /odom_wio  /robot0/realsense0/extrinsics/depth_to_color /robot0/realsense0/rgbd /tf /tf_static  /vl /vl/opt /vl/opt/pose_with_covariance /vl/pose_with_covariance
-
-"""
-"""
-ros2 launch realsense2_camera rs_launch.py \
-camera_namespace:=robot0 camera_name:=realsense0 \
-depth_module.depth_profile:=640x480x30 \
-rgb_camera.color_profile:=640x480x30 \
-depth_module.depth_format:=Z16 \
-rgb_camera.color_format:=RGB8 \
-enable_color:=true \
-enable_depth:=true \
-enable_rgbd:=true \
-enable_sync:=true \
-align_depth.enable:=true \
-serial_no:=_034422070213 \
-reconnect_timeout:=10.0 \
-wait_for_device_timeout:=60.0 \
-initial_reset:=true \
-clip_distance:=4.0
-"""
+def set_enabled(widget, enable):
+    widget.enabled = enable
+    for child in widget.get_children():
+        child.enabled = enable
 
 
-class DatasetObjectMapper:
+class ReconstructionWindow:
 
-    def __init__(self, cfg: DictConfig, args: argparse.Namespace):
+    def __init__(self, config: ConfigParser, font_id: int, cfg: DictConfig, args: argparse.Namespace):
+        ####################3
         self.common_init(cfg, args)
-        self.dataset_init(cfg)
-
-    def dataset_init(self, cfg: DictConfig):
-        """
-        1. pose / rgb / depth / intrinsics / extrinsics
-        """
-        dataset = get_dataset(
+        self.dataset = get_dataset(
             # dataset/dataconfigs/replica/replica.yaml
             dataconfig=cfg.dataset_config,
             # Replica
@@ -125,60 +111,180 @@ class DatasetObjectMapper:
             sequence=cfg.scene_id,
             start=cfg.start,  # 0
             end=cfg.end,  # -1
-            stride=cfg.stride,  # 50
-            desired_height=cfg.image_height,  # None # 680
-            desired_width=cfg.image_width,  # None # 1200
+            stride=1, #cfg.stride,  # 50
+            desired_height=int(cfg.image_height * self.args.resize_ratio),  # None # 680
+            desired_width=int(cfg.image_width * self.args.resize_ratio),  # None # 1200
             device="cpu",
             dtype=torch.float,
         )
+        # self.dataset_init(cfg)
 
-        for frame_idx in trange(len(dataset)):
-            rgb_tensor, depth_tensor, intrinsics, *_ = dataset[frame_idx] # resized
-            self.intrinsics = intrinsics.cpu().numpy()
-            depth_tensor = depth_tensor[..., 0]  # (H, W)
-            depth_array = depth_tensor.cpu().numpy()
-            rgb_np = rgb_tensor.cpu().numpy()  # (H, W, 3)
-            rgb_np = (rgb_np).astype(np.uint8)  # (H, W, 3)
-            bgr_np = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2BGR)  # (H, W, 3)
-            # Assert that bgr_np and depth_array are of the same shape.
-            assert bgr_np.shape[:2] == depth_array.shape, (
-                f"Shape mismatch: bgr{bgr_np.shape[:2]} vs depth{depth_array.shape}")
 
-            camera_pose_ = dataset.poses[frame_idx]
-            camera_pose_ = camera_pose_.cpu().numpy()  # (4, 4)
+        self.config = config
+        self.window = gui.Application.instance.create_window(
+            'Open3D - Reconstruction', 1280, 800)
+        w = self.window
+        em = w.theme.font_size
 
-            self.core_logic(bgr_np, depth_array, camera_pose=camera_pose_)
-        self.wrap_up()
+        spacing = int(np.round(0.25 * em))
+        vspacing = int(np.round(0.5 * em))
 
-    def ros2_init(self):
-        self._target_frame = "vl"  #"vl" # child_frame_id:
-        self._source_frame = "base_link"  # frame_id:
-        ###################################
-        self._tf_buffer = Buffer()
-        self._tf_listener = TransformListener(self._tf_buffer, self)
-        self.bridge = CvBridge()
-        # To store the rgb and depth images
-        self.rgb_image: Optional[np.ndarray] = None
-        self.depth_image: Optional[np.ndarray] = None
-        self.builtin_time = None
-        self.color_camera_matrix = None
-        self.color_dist_coeffs = None
-        self.intrinsics = None
-        self.depth_dist_coeffs = None
-        self.subscription = self.create_subscription(
-            RGBD,
-            '/robot0/realsense0/rgbd',  # 토픽 이름을 launch 파일에 맞게 수정
-            self.rgbd_callback,
-            10)
+        margins = gui.Margins(vspacing)
+        # First panel
+        self.panel = gui.Vert(spacing, margins)
 
-        # self._set_rgbd_info_subscribers()
-        # self._set_rgbd_subscribers()
+        ## Items in fixed props
+        self.fixed_prop_grid = gui.VGrid(2, spacing, gui.Margins(em, 0, em, 0))
+
+        ### Depth scale slider
+        scale_label = gui.Label('Depth scale')
+        self.scale_slider = gui.Slider(gui.Slider.INT)
+        self.scale_slider.set_limits(1000, 7000)
+        self.scale_slider.int_value = int(config.depth_scale)
+        self.fixed_prop_grid.add_child(scale_label)
+        self.fixed_prop_grid.add_child(self.scale_slider)
+        voxel_size_label = gui.Label('Voxel size')
+        self.voxel_size_slider = gui.Slider(gui.Slider.DOUBLE)
+        self.voxel_size_slider.set_limits(0.003, 0.01)
+        self.voxel_size_slider.double_value = config.voxel_size
+        self.fixed_prop_grid.add_child(voxel_size_label)
+        self.fixed_prop_grid.add_child(self.voxel_size_slider)
+
+        trunc_multiplier_label = gui.Label('Trunc multiplier')
+        self.trunc_multiplier_slider = gui.Slider(gui.Slider.DOUBLE)
+        self.trunc_multiplier_slider.set_limits(1.0, 20.0)
+        self.trunc_multiplier_slider.double_value = config.trunc_voxel_multiplier
+        self.fixed_prop_grid.add_child(trunc_multiplier_label)
+        self.fixed_prop_grid.add_child(self.trunc_multiplier_slider)
+
+        est_block_count_label = gui.Label('Est. blocks')
+        self.est_block_count_slider = gui.Slider(gui.Slider.INT)
+        self.est_block_count_slider.set_limits(4000, 100000)
+        self.est_block_count_slider.int_value = config.block_count
+        self.fixed_prop_grid.add_child(est_block_count_label)
+        self.fixed_prop_grid.add_child(self.est_block_count_slider)
+        est_point_count_label = gui.Label('Est. points')
+        self.est_point_count_slider = gui.Slider(gui.Slider.INT)
+        self.est_point_count_slider.set_limits(500000, 48000000)
+        self.est_point_count_slider.int_value = config.est_point_count
+        self.fixed_prop_grid.add_child(est_point_count_label)
+        self.fixed_prop_grid.add_child(self.est_point_count_slider)
+
+        ## Items in adjustable props
+        self.adjustable_prop_grid = gui.VGrid(2, spacing,
+                                              gui.Margins(em, 0, em, 0))
+
+        ### Reconstruction interval
+        interval_label = gui.Label('Recon. interval')
+        self.interval_slider = gui.Slider(gui.Slider.INT)
+        self.interval_slider.set_limits(1, 500)
+        self.interval_slider.int_value = 50
+        self.adjustable_prop_grid.add_child(interval_label)
+        self.adjustable_prop_grid.add_child(self.interval_slider)
+
+        ### Depth max slider
+        max_label = gui.Label('Depth max')
+        self.max_slider = gui.Slider(gui.Slider.DOUBLE)
+        self.max_slider.set_limits(3.0, 6.0)
+        self.max_slider.double_value = config.depth_max
+        self.adjustable_prop_grid.add_child(max_label)
+        self.adjustable_prop_grid.add_child(self.max_slider)
+
+        ### Depth diff slider
+        diff_label = gui.Label('Depth diff')
+        self.diff_slider = gui.Slider(gui.Slider.DOUBLE)
+        self.diff_slider.set_limits(0.07, 0.5)
+        self.diff_slider.double_value = config.odometry_distance_thr
+        self.adjustable_prop_grid.add_child(diff_label)
+        self.adjustable_prop_grid.add_child(self.diff_slider)
+        ### Update surface?
+        update_label = gui.Label('Update surface?')
+        self.update_box = gui.Checkbox('')
+        self.update_box.checked = True
+        self.adjustable_prop_grid.add_child(update_label)
+        self.adjustable_prop_grid.add_child(self.update_box)
+
+        ### Ray cast color?
+        raycast_label = gui.Label('Raycast color?')
+        self.raycast_box = gui.Checkbox('')
+        self.raycast_box.checked = True
+        self.adjustable_prop_grid.add_child(raycast_label)
+        self.adjustable_prop_grid.add_child(self.raycast_box)
+
+        set_enabled(self.fixed_prop_grid, True)
+        ## Application control
+        b = gui.ToggleSwitch('Resume/Pause')
+        b.set_on_clicked(self._on_switch)
+
+        ## Tabs
+        tab_margins = gui.Margins(0, int(np.round(0.5 * em)), 0, 0)
+        tabs = gui.TabControl()
+
+        ### Input image tab
+        tab1 = gui.Vert(0, tab_margins)
+        self.input_color_image = gui.ImageWidget()
+        self.input_depth_image = gui.ImageWidget()
+        tab1.add_child(self.input_color_image)
+        tab1.add_fixed(vspacing)
+        tab1.add_child(self.input_depth_image)
+        tabs.add_tab('Input images', tab1)
+        ### Rendered image tab
+        tab2 = gui.Vert(0, tab_margins)
+        self.raycast_color_image = gui.ImageWidget()
+        self.raycast_depth_image = gui.ImageWidget()
+        tab2.add_child(self.raycast_color_image)
+        tab2.add_fixed(vspacing)
+        tab2.add_child(self.raycast_depth_image)
+        tabs.add_tab('Raycast images', tab2)
+
+        ### Info tab
+        tab3 = gui.Vert(0, tab_margins)
+        self.output_info = gui.Label('Output info')
+        self.output_info.font_id = font_id
+        tab3.add_child(self.output_info)
+        tabs.add_tab('Info', tab3)
+
+        self.panel.add_child(gui.Label('Starting settings'))
+        self.panel.add_child(self.fixed_prop_grid)
+        self.panel.add_fixed(vspacing)
+        self.panel.add_child(gui.Label('Reconstruction settings'))
+        self.panel.add_child(self.adjustable_prop_grid)
+        self.panel.add_child(b)
+        self.panel.add_stretch()
+        self.panel.add_child(tabs)
+
+        # Scene widget
+        self.widget3d = gui.SceneWidget()
+        # FPS panel
+        self.fps_panel = gui.Vert(spacing, margins)
+        self.output_fps = gui.Label('FPS: 0.0')
+        self.fps_panel.add_child(self.output_fps)
+        # Now add all the complex panels
+        w.add_child(self.panel)
+        w.add_child(self.widget3d)
+        w.add_child(self.fps_panel)
+        self.widget3d.scene = rendering.Open3DScene(self.window.renderer)
+        self.widget3d.scene.set_background([1, 1, 1, 1])
+
+        w.set_on_layout(self._on_layout)
+        w.set_on_close(self._on_close)
+        self.is_done = False
+
+        self.is_started = False
+        self.is_running = False
+        self.is_surface_updated = False
+
+        self.idx = 0
+        self.poses = []
+
+        # Start running
+        threading.Thread(name='UpdateMain', target=self.update_main).start()
 
     def common_init(self, cfg: DictConfig, args: argparse.Namespace):
 
         self.cfg = cfg
         self.args = args
-        self.extrinsic = self._set_extrinsic()
+        self.extrinsic = None #self._set_extrinsic()
         # tracker : **탐지된 객체**, **병합된 객체** 및 **운영 수**와 같은 여러 상태 정보를 관리
         self.tracker = MappingTracker()
         # 만약 Rerun이 설치되어 있지 않거나, 사용하지 않는 경우, 이 변수는 None입니다.
@@ -191,11 +297,7 @@ class DatasetObjectMapper:
         self.objects = MapObjectList(device=self.cfg.device)
         self.map_edges = MapEdgeMapping(self.objects)
 
-        # output folder for this mapping experiment
-        # dataset_root: Datasets
-        # scene_id: Replica/room0
-        # exp_suffix: r_mapping_stride10
-        # self.exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
+
         exp_path = "./Datasets/Replica/room0/exps"
         if os.path.exists(exp_path):
             user_input = input(
@@ -208,7 +310,11 @@ class DatasetObjectMapper:
                 print(f"The folder {exp_path} has been deleted.")
             else:
                 print("The folder has not been deleted.")
-
+        # output folder for this mapping experiment
+        # dataset_root: Datasets
+        # scene_id: Replica/room0
+        # exp_suffix: r_mapping_stride10
+        # self.exp_out_path: Datasets/Replica/room0/exps/r_mapping_stride10
         self.exp_out_path = get_exp_out_path(self.cfg.dataset_root,
                                              self.cfg.scene_id,
                                              self.cfg.exp_suffix)
@@ -247,7 +353,7 @@ class DatasetObjectMapper:
             self.det_exp_path.mkdir(parents=True, exist_ok=True)
 
             ## Initialize the detection models
-            self.detection_model = measure_time(YOLO)('yolov8x-worldv2.pt')
+            self.detection_model = measure_time(YOLO)('yolov8x-worldv2.pt')# ('yolov8l-world.pt')#
             self.sam_predictor = SAM(
                 'sam_b.pt')  # SAM('mobile_sam.pt') # UltraLytics SAM
             (self.clip_model, _,
@@ -282,174 +388,349 @@ class DatasetObjectMapper:
         self.counter = 0
         self.frame_idx = -1
 
-    def rgbd_callback(self, msg: RGBD) -> None:
-        # Extract RGB image from RGBD message
-        rgb_image = self.convert_image_to_np(msg.rgb, "rgb8")
-        bgr_np = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2RGB)
-        # Extract Depth image from RGBD message
-        depth_image = self.convert_image_to_np(
-            msg.depth, "16UC1") / 1000  # Assuming 16-bit depth
-        # Print the maximum depth value
-        (self.color_camera_matrix,
-         self.color_dist_coeffs) = self.color_camera_info_callback(
-             msg.rgb_camera_info)
-        (self.intrinsics,
-         self.depth_dist_coeffs) = self.depth_camera_info_callback(
-             msg.depth_camera_info)
-        self.core_logic(bgr_np, depth_image, msg.header.stamp)
 
-    def convert_image_to_np(self, img_msg: Image, encoding: str) -> np.ndarray:
-        """Convert ROS Image message to numpy array using CvBridge."""
-        try:
-            # Use cv_bridge to convert to numpy array
-            np_image = self.bridge.imgmsg_to_cv2(img_msg, encoding)
-            return np_image
-        except Exception as e:
-            self.get_logger().error(f"Failed to convert image: {str(e)}")
-            return np.array([])  # Return empty array on failure
+    # def _set_extrinsic(self) -> np.ndarray:
+    #     axis_transpose_matrix = np.array([[0., 0., 1., 0.], [-1., 0., 0., 0.],
+    #                                       [0., -1., 0., 0.], [0., 0., 0., 1.]])
+    #     camera_translation = np.array([0.37, 0.035, 0.862])
+    #     camera_radian_rotation = np.deg2rad(np.array([0., 0., 0.]))
+    #     rotation = R.from_euler('xyz', camera_radian_rotation)
+    #     rotation_matrix_3 = rotation.as_matrix()
+    #     rotation_matrix = np.eye(4)
+    #     rotation_matrix[:3, :3] = rotation_matrix_3
+    #     translation_matrix = tf_transformations.translation_matrix(
+    #         camera_translation)
+    #     (camera_pose_wrt_agent
+    #     ) = translation_matrix @ rotation_matrix @ axis_transpose_matrix
+    #     return camera_pose_wrt_agent
 
-    def _set_rgbd_subscribers(self):
-        rgb_sub_topic_name = f"realsense{self.args.realsense_idx}/color"
-        rgb_sub = message_filters.Subscriber(self, CompressedImage,
-                                             rgb_sub_topic_name)
-        depth_sub_topic_name = \
-            f"realsense{self.args.realsense_idx}/depth"
-        depth_sub = message_filters.Subscriber(self, CompressedImage,
-                                               depth_sub_topic_name)
+    def _on_layout(self, ctx):
+        em = ctx.theme.font_size
+
+        panel_width = 20 * em
+        rect = self.window.content_rect
+
+        self.panel.frame = gui.Rect(rect.x, rect.y, panel_width, rect.height)
+
+        x = self.panel.frame.get_right()
+        self.widget3d.frame = gui.Rect(x, rect.y,
+                                       rect.get_right() - x, rect.height)
+
+        fps_panel_width = 7 * em
+        fps_panel_height = 2 * em
+        self.fps_panel.frame = gui.Rect(rect.get_right() - fps_panel_width,
+                                        rect.y, fps_panel_width,
+                                        fps_panel_height)
+
+    # Toggle callback: application's main controller
+    def _on_switch(self, is_on):
+        if not self.is_started:
+            gui.Application.instance.post_to_main_thread(
+                self.window, self._on_start)
+        self.is_running = not self.is_running
+
+    # On start: point cloud buffer and model initialization.
+    def _on_start(self):
+        max_points = self.est_point_count_slider.int_value
+
+        pcd_placeholder = o3d.t.geometry.PointCloud(
+            o3c.Tensor(np.zeros((max_points, 3), dtype=np.float32)))
+        pcd_placeholder.point.colors = o3c.Tensor(
+            np.zeros((max_points, 3), dtype=np.float32))
+        mat = rendering.MaterialRecord()
+        mat.shader = 'defaultUnlit'
+        mat.sRGB_color = True
+        self.widget3d.scene.scene.add_geometry('points', pcd_placeholder, mat)
+
+        self.model = o3d.t.pipelines.slam.Model(
+            self.voxel_size_slider.double_value, 16,
+            self.est_block_count_slider.int_value, o3c.Tensor(np.eye(4)),
+            o3c.Device(self.config.device))
+        self.is_started = True
+
+        set_enabled(self.fixed_prop_grid, False)
+        set_enabled(self.adjustable_prop_grid, True)
+
+    def _on_close(self):
+        self.is_done = True
+
+        if self.is_started:
+            print('Saving model to {}...'.format(self.config.path_npz))
+            self.model.voxel_grid.save(self.config.path_npz)
+            print('Finished.')
+
+            mesh_fname = '.'.join(self.config.path_npz.split('.')[:-1]) + '.ply'
+            print('Extracting and saving mesh to {}...'.format(mesh_fname))
+            mesh = extract_trianglemesh(self.model.voxel_grid, self.config,
+                                        mesh_fname)
+            print('Finished.')
+
+            log_fname = '.'.join(self.config.path_npz.split('.')[:-1]) + '.log'
+            print('Saving trajectory to {}...'.format(log_fname))
+            save_poses(log_fname, self.poses)
+            print('Finished.')
+            self.wrap_up()
+        return True
+
+    def init_render(self, depth_ref, color_ref):
         """
-        TODO: 큰 문제
-        - 부탁드려서, rgb 보내는 것과 depth 보내는 것의 timestamp를 동일하게 해달라고 부탁 
+        `init_render` 메서드는 초기 렌더링 설정을 담당하며,
+            주로 첫 번째 깊이 이미지와 컬러 이미지를 사용해 3D 장면을 초기화
+        이 메서드는 `Open3D`의 GUI를 활용해 시각화하는데, 다음과 같은 주요 단계로 나눌 수 있습니다:
+
+        1. **깊이 및 컬러 이미지 업데이트:**
+           - 첫 번째로 주어진 깊이 및 컬러 이미지를 사용하여 GUI의 이미지 위젯을 업데이트
+           - 이 작업은 사용자가 처음 GUI를 볼 때 깊이와 컬러 데이터를 시각적으로 확인할 수 있도록
+
+        2. **깊이 데이터 시각화:**
+           - 깊이 이미지는 `colorize_depth`라는 함수를 사용하여 색상으로 변환
+           - 이를 통해 깊이 데이터의 시각적인 표현이 가능
+
+        3. **카메라 설정:**
+           - 가상 카메라의 위치와 뷰포인트를 설정
+           - 이를 위해 축에 정렬된 바운딩 박스(`AxisAlignedBoundingBox`)를 사용하여
+             - 3D 공간의 크기와 위치를 지정하고,
+        - 카메라의 뷰를 중심점으로 이동시켜 사용자가 3D 장면을 적절하게 관찰할 수 있도록 합니다.
+           - 카메라의 시야각을 설정하고 장면의 초기 뷰를 정합니다.
+
+        4. **초기 렌더링 준비:**
+           - 위의 단계에서 설정된 이미지를 GUI에 적용하고, 사용자 인터페이스를 업데이트
+           - 이를 통해 사용자는 첫 번째 프레임을 확인할 수 있고,
+             - 이후 프레임이 추가적으로 처리될 때의 기준점이 만들어집니다.
+
         """
-        self.ts = message_filters.ApproximateTimeSynchronizer(
-            [rgb_sub, depth_sub], queue_size=10, slop=0.02)
-        self.ts.registerCallback(self.sync_callback)
+        self.input_depth_image.update_image(
+            depth_ref.colorize_depth(float(self.scale_slider.int_value),
+                                     self.config.depth_min,
+                                     self.max_slider.double_value).to_legacy())
+        self.input_color_image.update_image(color_ref.to_legacy())
 
-    @staticmethod
-    def save_cropped_images(image_crops: List[PIL.Image.Image],
-                            folder_path: str, frame_idx) -> None:
-        # 폴더가 존재하지 않으면 생성
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
+        self.raycast_depth_image.update_image(
+            depth_ref.colorize_depth(float(self.scale_slider.int_value),
+                                     self.config.depth_min,
+                                     self.max_slider.double_value).to_legacy())
+        self.raycast_color_image.update_image(color_ref.to_legacy())
+        self.window.set_needs_layout()
 
-        # 각각의 이미지들을 폴더에 저장
-        for i, cropped_image in enumerate(image_crops):
-            # 이미지 파일 이름을 생성 (예: crop_0.png, crop_1.png ...)
-            image_path = os.path.join(folder_path, f"[{frame_idx}]crop_{i}.png")
+        bbox = o3d.geometry.AxisAlignedBoundingBox([-5, -5, -5], [5, 5, 5])
+        self.widget3d.setup_camera(60, bbox, [0, 0, 0])
+        self.widget3d.look_at([0, 0, 0], [0, -1, -3], [0, -1, 0])
 
-            # 이미지 저장
-            cropped_image.save(image_path)
+    def update_render(self, input_depth, input_color, raycast_depth,
+                      raycast_color, pcd, frustum):
+        self.input_depth_image.update_image(
+            input_depth.colorize_depth(
+                float(self.scale_slider.int_value), self.config.depth_min,
+                self.max_slider.double_value).to_legacy())
+        self.input_color_image.update_image(input_color.to_legacy())
 
-    def _set_rgbd_info_subscribers(self):
-        color_camera_info_topic_name = \
-            f"realsense{self.args.realsense_idx}/color_camera_info"
-        self.color_camera_info_sub = self.create_subscription(
-            CameraInfo, color_camera_info_topic_name,
-            self.color_camera_info_callback, 10)
+        self.raycast_depth_image.update_image(
+            raycast_depth.colorize_depth(
+                float(self.scale_slider.int_value), self.config.depth_min,
+                self.max_slider.double_value).to_legacy())
+        self.raycast_color_image.update_image(
+            (raycast_color).to(o3c.uint8, False, 255.0).to_legacy())
 
-        depth_camera_info_topic_name = \
-            f"realsense{self.args.realsense_idx}/depth_camera_info"
+        if self.is_scene_updated:
+            if pcd is not None and pcd.point.positions.shape[0] > 0:
+                self.widget3d.scene.scene.update_geometry(
+                    'points', pcd, rendering.Scene.UPDATE_POINTS_FLAG |
+                    rendering.Scene.UPDATE_COLORS_FLAG)
 
-        self.depth_camera_info_sub = self.create_subscription(
-            CameraInfo, depth_camera_info_topic_name,
-            self.depth_camera_info_callback, 10)
+        self.widget3d.scene.remove_geometry("frustum")
+        mat = rendering.MaterialRecord()
+        mat.shader = "unlitLine"
+        mat.line_width = 5.0
+        self.widget3d.scene.add_geometry("frustum", frustum, mat)
 
-    def _set_extrinsic(self) -> np.ndarray:
-        axis_transpose_matrix = np.array([[0., 0., 1., 0.], [-1., 0., 0., 0.],
-                                          [0., -1., 0., 0.], [0., 0., 0., 1.]])
-        camera_translation = np.array([0.37, 0.035, 0.862])
-        camera_radian_rotation = np.deg2rad(np.array([0., 0., 0.]))
-        rotation = R.from_euler('xyz', camera_radian_rotation)
-        rotation_matrix_3 = rotation.as_matrix()
-        rotation_matrix = np.eye(4)
-        rotation_matrix[:3, :3] = rotation_matrix_3
-        translation_matrix = tf_transformations.translation_matrix(
-            camera_translation)
-        (camera_pose_wrt_agent
-        ) = translation_matrix @ rotation_matrix @ axis_transpose_matrix
-        return camera_pose_wrt_agent
+    # Major loop
+    def update_main(self):
+        depth_file_names, color_file_names = load_rgbd_file_names(self.config)
 
-    def _set_extrinsic_prev(self) -> np.ndarray:
-        axis_transpose_matrix = np.array([[0., -1., 0., 0.], [0., 0., -1., 0.],
-                                          [1., 0., 0., 0.], [0., 0., 0., 1.]])
-        if self.args.realsense_idx == 0:  # 로봇 정면 기준 왼쪽 카메라 (+y)
-            camera_translation = np.array([0.23547, 0.10567, 0.90784])
-            camera_radian_rotation = np.deg2rad(np.array(
-                [0., 52., 20.]))  # yaw 회전 후 -> roll -> ptich
-            rotation = R.from_euler(
-                'xyz', camera_radian_rotation
-            )  # same as yaw_matrix @ pitch_matrix @ roll_matrix
-            rotation_matrix_3 = rotation.as_matrix()
-            rotation_matrix = np.eye(4)
-            rotation_matrix[:3, :3] = rotation_matrix_3
-        elif self.args.realsense_idx == 2:  # 로봇 정면 기준 오른쪽 카메라 (-y)
-            camera_translation = np.array([0.23547, -0.10567, 0.90784])
-            camera_degree_rotation = np.deg2rad(np.array(
-                [0., 52., -20.]))  # yaw 회전 후 -> roll -> ptich
-            rotation = R.from_euler('xyz', camera_degree_rotation)
-            rotation_matrix_3 = rotation.as_matrix()
-            rotation_matrix = np.eye(4)
-            rotation_matrix[:3, :3] = rotation_matrix_3
+        # intrinsic: intrinsic_matrix Tensor
+        intrinsic = load_intrinsic(self.config)
+        intrinsic[0,0] *= self.args.resize_ratio
+        intrinsic[1,1] *= self.args.resize_ratio
+        intrinsic[0,2] *= self.args.resize_ratio
+        intrinsic[1,2] *= self.args.resize_ratio
+
+        n_files = len(color_file_names)
+        traj_path = os.path.join(self.config.path_dataset, "traj.txt")
+        if os.path.exists(traj_path):
+            loaded_poses = general_utils.load_poses(traj_path, n_files)
+            print("Loaded poses from {}".format(traj_path))
         else:
-            raise ValueError("Invalid realsense_idx")
-        translation_matrix = tf_transformations.translation_matrix(
-            camera_translation)
-        # IMPORTANT !!! world_coord = camera_pose_wrt_agent @ camera_coord
-        (camera_pose_wrt_agent
-        ) = translation_matrix @ rotation_matrix @ np.linalg.inv(
-            axis_transpose_matrix)
-        # camera_pose_wrt_agent shape :
-        return camera_pose_wrt_agent
+            T_frame_to_model = o3c.Tensor(np.identity(4))
+        device = o3d.core.Device(self.config.device)
+        depth_ref = o3d.t.io.read_image(depth_file_names[0]).resize(self.args.resize_ratio)
+        color_ref = o3d.t.io.read_image(color_file_names[0]).resize(self.args.resize_ratio)
+        input_frame = o3d.t.pipelines.slam.Frame(depth_ref.rows,
+                                                 depth_ref.columns, intrinsic,
+                                                 device)
+        raycast_frame = o3d.t.pipelines.slam.Frame(depth_ref.rows,
+                                                   depth_ref.columns, intrinsic,
+                                                   device)
 
-    @staticmethod
-    def _transform_stamped_to_matrix(transform: TransformStamped) -> np.ndarray:
-        # 평행 이동 벡터 추출
-        translation = transform.transform.translation
-        trans = np.array([translation.x, translation.y, translation.z])
+        input_frame.set_data_from_image('depth', depth_ref)
+        input_frame.set_data_from_image('color', color_ref)
 
-        # 쿼터니언 추출 및 회전 행렬 생성
-        rotation = transform.transform.rotation
-        quat = [rotation.x, rotation.y, rotation.z, rotation.w]
-        #trans: [      45.36      23.888   1.082e-08] quat: [6.011475333770007e-05, 2.852841381158057e-05, 0.11140977474491677, 0.9937745507224629]
-        orientation = np.array(tf_transformations.euler_from_quaternion(quat))
-        yaw = orientation[2]
-        print("trans:", np.round(trans, 2), "yaw:",
-              np.round(np.rad2deg(yaw), 2))
-        # make 4 by 4 yaw rotation matrix
-        yaw_matrix = np.array([[np.cos(yaw), -np.sin(yaw), 0, 0],
-                               [np.sin(yaw), np.cos(yaw), 0, 0], [0, 0, 1, 0],
-                               [0, 0, 0, 1]])
-        # 4x4 변환 행렬 생성
-        translation_matrix = np.identity(4)
-        translation_matrix[:3, 3] = trans
-        print("translation_matrix:", translation_matrix)
-        print("yaw_matrix:", yaw_matrix)
-        # world_coord 기준 좌표 = transform_matrix @ agent_coord 기준 좌표
-        # TODO: inv(rotation_matrix) 를 써야하는지 확인해보기
-        transform_matrix = translation_matrix @ yaw_matrix
-        # transform_matrix: (4, 4)
-        return transform_matrix
+        raycast_frame.set_data_from_image('depth', depth_ref)
+        raycast_frame.set_data_from_image('color', color_ref)
 
-    def _add_all_true_mask(self, rgb_array: np.ndarray,
-                           masks_np: np.ndarray) -> np.ndarray:
-        H, W, _ = rgb_array.shape
-        all_true_mask = np.expand_dims(np.ones((H, W), dtype=np.uint8), axis=0)
-        if (masks_np is None) or (len(masks_np) == 0):
-            masks_np = all_true_mask
-        else:
-            masks_np = np.concatenate([all_true_mask, masks_np], axis=0)
-        return masks_np
+        gui.Application.instance.post_to_main_thread(
+            self.window, lambda: self.init_render(depth_ref, color_ref))
+        fps_interval_len = 30
+        self.idx = 0
+        pcd = None
 
-    def sync_callback(self, rgb_msg: CompressedImage,
-                      depth_msg: CompressedImage):
-        rgb_array, rgb_builtin_time = self.rgb_callback(rgb_msg)
-        depth_array, depth_builtin_time = self.depth_callback(depth_msg)
-        self.core_logic(rgb_array, depth_array, depth_builtin_time)
+        ##########################################
+        np.random.seed(42)
+        avg_fixed_minus_gt_deg = np.zeros(6)
+        avg_noise_deg = np.zeros(6)
+        ##########################################
+
+        start = time.time()
+        while not self.is_done:
+            if not self.is_started or not self.is_running:
+                time.sleep(0.05)
+                continue
+
+            depth = o3d.t.io.read_image(depth_file_names[self.idx]).resize(self.args.resize_ratio).to(device)
+            color = o3d.t.io.read_image(color_file_names[self.idx]).resize(self.args.resize_ratio).to(device)
+
+            input_frame.set_data_from_image('depth', depth)
+            input_frame.set_data_from_image('color', color)
+            if os.path.exists(traj_path):
+                pose_np_gt = loaded_poses[self.idx]
+                T_frame_to_model = o3c.Tensor(pose_np_gt)
+                if self.config.add_noise:
+                    xyz_noise, rpy_noise = general_utils.get_noise(
+                        max_xyz_noise=0.1, max_angle_noise_deg=3.)
+                    xyz_noise = np.array([0.0, 0.0, 0.0])
+                    rpy_noise = np.array([0.0, 0.0, 0.0])
+                    pose_flat_deg_np_gt = general_utils.extract_xyz_rpw(
+                        pose_np_gt)
+                    T_frame_to_model = general_utils.set_noise(
+                        xyz_noise, rpy_noise, T_frame_to_model,
+                        pose_flat_deg_np_gt, avg_noise_deg)
+
+            if self.idx > 0:
+                self.model.update_frame_pose(self.idx, T_frame_to_model)
+                self.model.synthesize_model_frame(
+                    raycast_frame, float(self.scale_slider.int_value),
+                    self.config.depth_min, self.max_slider.double_value,
+                    self.trunc_multiplier_slider.double_value,
+                    self.raycast_box.checked)
+                result = self.model.track_frame_to_model(
+                    input_frame,
+                    raycast_frame,
+                    float(self.scale_slider.int_value),
+                    self.max_slider.double_value,
+                )
+                T_frame_to_model = T_frame_to_model @ result.transformation
+                ################# For logging. (avg_fixed_minus_gt_deg)
+                if self.config.add_noise:
+                    recovered_pose_np = T_frame_to_model.cpu().numpy()
+                    recovered_pose_flat_deg_np = general_utils.extract_xyz_rpw(
+                        recovered_pose_np)
+                    fixed_minus_gt_deg = np.abs(recovered_pose_flat_deg_np -
+                                                pose_flat_deg_np_gt)
+                    avg_fixed_minus_gt_deg += fixed_minus_gt_deg
+                ##################
+
+            self.poses.append(T_frame_to_model.cpu().numpy())
+            self.model.update_frame_pose(self.idx, T_frame_to_model)
+            self.model.integrate(input_frame,
+                                 float(self.scale_slider.int_value),
+                                 self.max_slider.double_value,
+                                 self.trunc_multiplier_slider.double_value)
+            #########################
+            if self.idx % self.cfg.stride == 0:
+                rgb_tensor, depth_tensor, intrinsics, *_ = self.dataset[self.idx]  # resized
+                self.intrinsics = intrinsics.cpu().numpy()
+                depth_tensor = depth_tensor[..., 0]  # (H, W)
+                depth_array = depth_tensor.cpu().numpy()
+                rgb_np = rgb_tensor.cpu().numpy()  # (H, W, 3)
+                rgb_np = (rgb_np).astype(np.uint8)  # (H, W, 3)
+                bgr_np = cv2.cvtColor(rgb_np, cv2.COLOR_RGB2BGR)  # (H, W, 3)
+                # Assert that bgr_np and depth_array are of the same shape.
+                assert bgr_np.shape[:2] == depth_array.shape, (
+                    f"Shape mismatch: bgr{bgr_np.shape[:2]} vs depth{depth_array.shape}")
+
+                camera_pose_ = T_frame_to_model.cpu().numpy()  # (4, 4)
+
+                self.core_logic(bgr_np, depth_array, camera_pose=camera_pose_)
+
+            if (self.idx % self.interval_slider.int_value == 0 and
+                    self.update_box.checked) \
+                    or (self.idx == 3) \
+                    or (self.idx == n_files - 1):
+                pcd = self.model.voxel_grid.extract_point_cloud(
+                    3.0, self.est_point_count_slider.int_value).to(
+                        o3d.core.Device('CPU:0'))
+                self.is_scene_updated = True
+            else:
+                self.is_scene_updated = False
+
+            frustum = o3d.geometry.LineSet.create_camera_visualization(
+                color.columns, color.rows, intrinsic.numpy(),
+                np.linalg.inv(T_frame_to_model.cpu().numpy()), 0.2)
+            frustum.paint_uniform_color([0.961, 0.475, 0.000])
+
+            # Output FPS
+            if (self.idx % fps_interval_len == 0):
+                end = time.time()
+                elapsed = end - start
+                start = time.time()
+                self.output_fps.text = 'FPS: {:.3f}'.format(fps_interval_len /
+                                                            elapsed)
+
+            # Output info
+            info = 'Frame {}/{}\n\n'.format(self.idx, n_files)
+            info += 'Transformation:\n{}\n'.format(
+                np.array2string(T_frame_to_model.numpy(),
+                                precision=3,
+                                max_line_width=40,
+                                suppress_small=True))
+            info += 'Active voxel blocks: {}/{}\n'.format(
+                self.model.voxel_grid.hashmap().size(),
+                self.model.voxel_grid.hashmap().capacity())
+            info += 'Surface points: {}/{}\n'.format(
+                0 if pcd is None else pcd.point.positions.shape[0],
+                self.est_point_count_slider.int_value)
+
+            self.output_info.text = info
+
+            gui.Application.instance.post_to_main_thread(
+                self.window, lambda: self.update_render(
+                    input_frame.get_data_as_image('depth'),
+                    input_frame.get_data_as_image('color'),
+                    raycast_frame.get_data_as_image('depth'),
+                    raycast_frame.get_data_as_image('color'), pcd, frustum))
+
+            self.idx += 1
+            self.is_done = self.is_done | (self.idx >= n_files)
+
+        time.sleep(0.5)
+        if self.config.add_noise:
+            """
+avg_fixed_minus_gt_deg:  [0.04 0.06 0.03 0.27 0.16 0.23]
+avg_noise_deg:  [0. 0. 0. 0. 0. 0.]
+            """
+            avg_fixed_minus_gt_deg /= n_files
+            avg_noise_deg /= n_files
+            print("-----------------")
+            print("avg_fixed_minus_gt_deg: ", np.round(avg_fixed_minus_gt_deg,
+                                                       2))
+            print("avg_noise_deg: ", np.round(avg_noise_deg, 2))
+            print("-----------------")
 
     def core_logic(self, bgr_np: np.ndarray, depth_array: np.ndarray,
-                   depth_builtin_time: Optional[Time] = None,
+                   depth_builtin_time = None,
                    camera_pose: Optional[np.ndarray] = None):
         color_path = None
         #### 1. frame 처리
+        first_start_time = time.time()
         self.frame_idx += 1
         if self.intrinsics is None:
             return
@@ -572,7 +853,7 @@ class DatasetObjectMapper:
             """ make_vlm_edges_and_captions
   - IoU가 80% 이상 겹치면, 신뢰도가 낮은 객체를 제거
   - bg_classes 클래스 제거
-  
+
   - 위 결과를 저장
     - vis_save_path_for_vlm
 
@@ -586,17 +867,19 @@ class DatasetObjectMapper:
     {"id": "2", "name": "object2", "caption": "concise description of object2"}
 ]
             """
-            labels, edges, _, captions = make_vlm_edges_and_captions(
-                bgr_np,
-                curr_det,
-                self.obj_classes,
-                detection_class_labels,
-                self.det_exp_vis_path,
-                color_path,
-                self.cfg.make_edges,
-                self.openai_client,
-                self.frame_idx,
-                save_result=True)
+            edges = []
+            captions = []
+            # labels, edges, _, captions = make_vlm_edges_and_captions(
+            #     bgr_np,
+            #     curr_det,
+            #     self.obj_classes,
+            #     detection_class_labels,
+            #     self.det_exp_vis_path,
+            #     color_path,
+            #     self.cfg.make_edges,
+            #     self.openai_client,
+            #     self.frame_idx,
+            #     save_result=True)
             # TODO: 더비겅이 완료된 후엔, save_result = False로 해야함.
             ##### 1.2. [끝]
             """
@@ -640,7 +923,7 @@ class DatasetObjectMapper:
                     detection_class_labels,  # len = 34, "sofa chair 0"
                 # len = 19, "sofa chair 0" -> detection_class_labels을 필터링한 것
                 # TODO: 이게 왜 필요하지?
-                "labels": labels,
+                "labels": detection_class_labels,
                 # TODO: 이게 왜 필요하지?
                 "edges": edges,  # len = 0
                 "captions": captions,  # len = 0
@@ -738,7 +1021,7 @@ class DatasetObjectMapper:
             BG_CLASSES=self.obj_classes.get_bg_classes_arr(),
             mask_area_threshold=self.cfg.mask_area_threshold,  # 25
             max_bbox_area_ratio=self.cfg.max_bbox_area_ratio,  # 0.5
-            mask_conf_threshold=None,  #self.cfg.mask_conf_threshold, # 0.25
+            mask_conf_threshold=None,  # self.cfg.mask_conf_threshold, # 0.25
         )
 
         grounded_obs = filtered_grounded_obs
@@ -759,23 +1042,24 @@ self.intrinsics.cpu().numpy()[:3, :3].shape: (3, 3)
 image_rgb.shape: (680, 1200, 3)
 camera_pose.shape: (4, 4)
         """
+        print("first_elapsed_time: ", round(time.time() - first_start_time, 2))
         #### 2. pcd 처리
-
+        second_start_time = time.time()
         ##### 2.1. [시작] 3d pointcloud 만들기
         # obj_pcds_and_bboxes : [ {'pcd': pcd, 'bbox': bbox} , ... ]
         obj_pcds_and_bboxes: List[Dict[str, Any]] = measure_time(
             detections_to_obj_pcd_and_bbox)(
-                depth_array=depth_array,
-                masks=grounded_obs['mask'],
-                cam_K=self.intrinsics[:3, :3],  # Camera intrinsics
-                image_rgb=rgb_np,
-                trans_pose=camera_pose,
-                min_points_threshold=self.cfg.min_points_threshold,  # 16
-                # overlap # "iou", "giou", "overlap"
-                spatial_sim_type=self.cfg.spatial_sim_type,  # overlap
-                obj_pcd_max_points=self.cfg.obj_pcd_max_points,  # 5000
-                device=self.cfg.device,
-            )
+            depth_array=depth_array,
+            masks=grounded_obs['mask'],
+            cam_K=self.intrinsics[:3, :3],  # Camera intrinsics
+            image_rgb=rgb_np,
+            trans_pose=camera_pose,
+            min_points_threshold=self.cfg.min_points_threshold,  # 16
+            # overlap # "iou", "giou", "overlap"
+            spatial_sim_type=self.cfg.spatial_sim_type,  # overlap
+            obj_pcd_max_points=self.cfg.obj_pcd_max_points,  # 5000
+            device=self.cfg.device,
+        )
         ##### 2.1. [끝] 3d pointcloud 만들기
         for obj in obj_pcds_and_bboxes:
             if obj:
@@ -819,8 +1103,9 @@ camera_pose.shape: (4, 4)
         if len(detection_list) == 0:  # no detections, skip
             return
         ##### 2.3. [끝] frame 결과와 frame 3차원 결과 융합
-
+        print("second_elapsed_time: ", round(time.time() - second_start_time, 2))
         #### 3. 기존 object pcd와 융합
+        third_start_time = time.time()
         ##### 3.1. [시작] 기존 object들과 융합하기
         # 아무것도 없었으면, 그냥 추가
         if len(self.objects) == 0:
@@ -897,16 +1182,16 @@ camera_pose.shape: (4, 4)
                 curr_first_detected = curr_map_edge.first_detected
                 curr_num_det = curr_map_edge.num_detections
                 if (self.frame_idx - curr_first_detected
-                        > 5) and curr_num_det < 2:
+                    > 5) and curr_num_det < 2:
                     edges_to_delete.append((curr_obj1_idx, curr_obj2_idx))
             for edge in edges_to_delete:
                 self.map_edges.delete_edge(edge[0], edge[1])
         ##### 3.2. [끝] edge 계산하기
 
         #### 4. 주기적 후처리
-
+        print("third_elapsed_time: ", round(time.time() - third_start_time, 2))
         ##### 4.1. [시작] 주기적 "누적 object" 후처리
-
+        fourth_start_time = time.time()
         # Denoising
         if processing_needed(
                 # Run DBSCAN every k frame. This operation is heavy
@@ -1016,7 +1301,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
         self.tracker.increment_total_objects(len(self.objects))
         self.tracker.increment_total_detections(len(detection_list))
         ## 4.3. [끝] 주기적으로 3d pcd 결과 저장
-
+        print("fourth_elapsed_time: ", round(time.time() - fourth_start_time, 2))
         #################
 
     def wrap_up(self):
@@ -1125,113 +1410,70 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
                 save_video_detections(self.det_exp_path)
         ##### 5.4. [끝]
 
-    @staticmethod
-    def get_transform_between_frames(frames_yaml: str, target_frame: str,
-                                     source_frame: str):
-        # Parse the YAML string
-        frames_data = yaml.safe_load(frames_yaml)
-
-        # Iterate through frames to find the relevant target and source frames
-        for frame_name, frame_info in frames_data.items():
-            if frame_name == source_frame and target_frame in frame_info[
-                    'parent']:
-                return frame_info  # Return the data for the transform
-        return None
-
-    def _get_pose_data(self, time_msg: Time) -> Optional[np.ndarray]:
-        try:  # time_msg: from builtin_interfaces.msg import Time
-            vl_transform = self._tf_buffer.lookup_transform(
-                target_frame=self._target_frame,
-                source_frame=self._source_frame,
-                time=time_msg)
-            agent_pose = self._transform_stamped_to_matrix(vl_transform)
-
-            return agent_pose
-        except LookupException:
-            print("[pose tf listener]LookupException")
-        except ConnectivityException:
-            print("[pose tf listener]ConnectivityException")
-        except ExtrapolationException:
-            print("[pose tf listener]ExtrapolationException")
-        return None
-
-    def rgb_callback(self, msg: CompressedImage) -> Tuple[np.ndarray, Time]:
-        builtin_time = msg.header.stamp
-        # 메시지에서 이미지 데이터를 읽어서 OpenCV 이미지로 변환
-        np_array = np.frombuffer(msg.data, np.uint8)
-        rgb_array = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
-
-        # # publisher가 BGR 순서의 이미지를 보내고 있음.
-        # # frombuffer를 사용하면,
-        # # 바이너리 데이터를 복사하지 않고, 직접 배열로 변환할 수 있어 메모리 사용량을 최소화
-        # rgb_array = cv2.cvtColor(bgr_image, cv2.COLOR_BGR2RGB)
-        return rgb_array, builtin_time
-
-    def color_camera_info_callback(
-            self, msg: CameraInfo) -> Tuple[np.ndarray, np.ndarray]:
-        # get distortion coefficients and camera matrix.
-        dist_coeffs = np.array(msg.d)  # (5,)
-        camera_matrix = np.array(msg.k).reshape(3, 3)
-        """
-self.rgb_intrinsics: [[     301.56           0      214.37]
- [          0       300.9      121.26]
- [          0           0           1]]
-self.rgb_dist_coeffs: [          0           0           0           0           0]
-
-        """
-        return camera_matrix, dist_coeffs
-
-    def depth_camera_info_callback(
-            self, msg: CameraInfo) -> Tuple[np.ndarray, np.ndarray]:
-        # get distortion coefficients and camera matrix.
-        dist_coeffs = np.array(msg.d)  # (5,) # TODO: 전부 0으로 나오므로, 의미가 없음.
-        camera_matrix = np.array(msg.k).reshape(3, 3)
-        """
-self.intrinsics: (240, 424) 
-[[     209.05           0      212.36]
- [          0      209.05      118.82]
- [          0           0           1]]        
- self.intrinsics:  (480, 640) -> (480, 848 ? why?)
-[[     419.05           0      429.72]
- [          0      419.05      237.82]
- [          0           0           1]]   
- 
- [[     377.81           0      318.96]
- [          0      377.81      240.15]
- [          0           0           1]]   
- 
-        """
-        # TODO: 나중에 지워야 함
-        self.intrinsics = camera_matrix
-        self.intrinsics = np.array([[377.81, 0, 318.96], [0, 377.81, 240.15],
-                                    [0, 0, 1]])
-        """
-self.depth_dist_coeffs: [          0           0           0           0           0]
-        """
-        self.depth_dist_coeffs = dist_coeffs
-        return camera_matrix, dist_coeffs
-
-    def depth_callback(self,
-                       msg: CompressedImage,
-                       rescale_depth: float = 4.) -> Tuple[np.ndarray, Time]:
-        # np_array = np.frombuffer(msg.data, np.uint8)
-        # depth_array = cv2.imdecode(np_array, cv2.IMREAD_ANYDEPTH)
-        # TODO: check
-        builtin_time = msg.header.stamp
-        img = np.ndarray(shape=(1, len(msg.data)),
-                         dtype="uint8",
-                         buffer=msg.data)
-        img = cv2.imdecode(img, cv2.IMREAD_ANYCOLOR) * rescale_depth / 255.0
-        return img, builtin_time
-
 
 @hydra.main(version_base=None,
             config_path="../hydra_configs/",
             config_name="rerun_realtime_mapping")
 def main(cfg: DictConfig):
+    parser = ConfigParser()
+    """ 얘가 default_config.yml을 읽어서 config를 만들어줌
+`--config` 인자를 추가할 때 `is_config_file=True` 옵션을 사용했기 때문에 해당 파일을 자동으로 읽어오는 것
+이 동작은 일반적인 `argparse` 라이브러리에서는 제공되지 않으며, 확장 라이브러리인 `configargparse`에서 제공하는 기능
+
+### 1. **`configargparse`의 동작 원리**
+- `configargparse`는 `argparse`와 호환되지만, 설정 파일을 직접 읽고 처리할 수 있는 기능을 제공
+- `parser.add(..., is_config_file=True)`는 `configargparse`를 사용하여 설정 파일을 지정할 수 있는 인자를 정의
+- 실행 파일과 같은 경로에 `default_config.yml`이 있는 경우, `configargparse`는 해당 파일을 자동으로 찾고 읽어들임
+
+### 2. **자동으로 설정 파일을 읽는 원리**
+`configargparse`는 기본적으로 설정 파일을 자동으로 로드하는 동작을 갖고 있으며, 다음과 같은 원리로 동작합니다:
+
+#### 2.1. `is_config_file=True` 옵션
+- `is_config_file=True`를 사용하면 `configargparse`는 해당 인자를 설정 파일로 인식합니다. 
+    - 즉, 이 인자를 통해 설정 파일의 경로를 받아들이는 역할을 합니다.
+- `--config` 인자를 명령줄에서 명시하지 않더라도, 
+    - `configargparse`는 실행 파일의 경로를 기반으로 `default_config.yml`과 같은 일반적인 파일 이름을 자동으로 찾습니다.
+
+#### 2.2. 내부 파일 검색 및 로드
+- `configargparse`는 `ArgumentParser`가 생성될 때, 
+    - `default_config_files`와 현재 경로에 있는 파일들을 함께 검색하여 설정 파일이 있는지 확인합니다.
+- 파일 이름이 `default_config.yml`과 같이 일반적으로 많이 쓰이는 이름인 경우, 자동으로 이를 설정 파일로 인식하여 읽어들이는 기능을 제공
+    """
+    # /home/hsb/PycharmProjects/Open3D/examples/python/t_reconstruction_system/config.py
+    # 위 경로에서 기본 설설정 파일을 "default_config.yml"로 지정해놨음
+    parser.add(
+        '--config',
+        is_config_file=True,
+        help='YAML config file path. Please refer to default_config.yml as a '
+             'reference. It overrides the default config file, but will be '
+             'overridden by other command line inputs.')
+    parser.add('--default_dataset',
+               help='Default dataset is used when config file is not provided. '
+                    'Default dataset may be selected from the following options: '
+                    '[lounge, bedroom, jack_jack]',
+               default='lounge')
+    parser.add('--path_npz',
+               help='path to the npz file that stores voxel block grid.',
+               default='output.npz')
+    parser.add('--add_noise',
+               type=bool,
+               default=True,
+               help='Add noise to the poses')
+    config = parser.get_config()
+
+    if config.path_dataset == '':
+        config = get_default_dataset(config)
+
+    # Extract RGB-D frames and intrinsic from bag file.
+    if config.path_dataset.endswith(".bag"):
+        assert os.path.isfile(
+            config.path_dataset), f"File {config.path_dataset} not found."
+        print("Extracting frames from RGBD video file")
+        config.path_dataset, config.path_intrinsic, config.depth_scale = extract_rgbd_frames(
+            config.path_dataset)
 
     parser = argparse.ArgumentParser(
-        description="RealtimeHumanSegmenterNode Node")
+        description='Open3D Reconstruction System')
     parser.add_argument('--realsense_idx',
                         type=int,
                         default=0,
@@ -1244,15 +1486,24 @@ def main(cfg: DictConfig):
                         type=float,
                         default=0.2,
                         help="Confidence threshold for detection")
+    parser.add_argument('--resize_ratio',
+                        type=float,
+                        default=0.5,
+                        help="Resize ratio for the image")
     parser.add_argument(
         '--obj_pcd_max_points',
         type=int,
         default=5000,
         help="Maximum number of points in an object's point cloud")
     args = parser.parse_args()
-    DatasetObjectMapper(cfg, args)
 
+    app = gui.Application.instance
+    app.initialize()
+    mono = app.add_font(gui.FontDescription(gui.FontDescription.MONOSPACE))
+    w = ReconstructionWindow(config, mono, cfg, args)
+    app.run()
 
-if __name__ == "__main__":
-
+if __name__ == '__main__':
     main()
+
+

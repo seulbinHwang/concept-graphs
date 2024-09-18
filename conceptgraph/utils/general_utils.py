@@ -211,7 +211,6 @@ def get_bb_extent(bbox: Union[o3d.geometry.OrientedBoundingBox,
 def get_bb_R(bbox: Union[o3d.geometry.OrientedBoundingBox,
                             o3d.geometry.AxisAlignedBoundingBox]) -> np.ndarray:
     if isinstance(bbox, o3d.geometry.OrientedBoundingBox):
-        print("bbox.R:", bbox.R.shape)
         return bbox.R
     elif isinstance(bbox, o3d.geometry.AxisAlignedBoundingBox):
         return np.eye(3)

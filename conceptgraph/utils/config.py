@@ -18,6 +18,8 @@ class ConfigParser(configargparse.ArgParser):
             os.path.join(os.path.dirname(__file__), 'replica_config.yml')
         ],
                          conflict_handler='resolve')
+        path = os.path.join(os.path.dirname(__file__), 'replica_config.yml')
+        print(path)
         # yapf:disable
         # Default arguments
         self.add(

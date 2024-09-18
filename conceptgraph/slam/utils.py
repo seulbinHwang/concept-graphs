@@ -1671,14 +1671,12 @@ image_rgb_tensor.shape:  torch.Size([680, 1200, 3])
     """
     points_tensor, colors_tensor = batch_mask_depth_to_points_colors(
         depth_tensor, masks_tensor, cam_K_tensor, image_rgb_tensor, device)
-    print("N: ", N)
     processed_objects = [None] * N  # Initialize with placeholders
     for i in range(N):
         mask_points = points_tensor[i]  # (H, W, 3)
         mask_colors = colors_tensor[i] if colors_tensor is not None else None
 
         valid_points_mask = mask_points[:, :, 2] > 0  # (H, W)
-        print("valid_points_mask.shape: ", valid_points_mask.shape)
         # 5개 이상의 포인트가 없으면 -> 무시한다.
         if torch.sum(valid_points_mask) < min_points_threshold:
             print("torch.sum(valid_points_mask): ",
