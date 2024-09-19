@@ -588,7 +588,7 @@ class RealsenseDataset(GradSLAMDataset):
         for ext in extensions:
             color_paths = glob.glob(os.path.join(color_folder, ext))
             if len(color_paths) == len(depth_paths):
-                return depth_paths, sorted(color_paths), None
+                return sorted(color_paths), depth_paths,  None
         raise ValueError(
             f'Found {len(depth_paths)} depth images in {depth_folder}, but cannot find matched number of color images in {color_folder} with extensions {extensions}, abort!'
         )
