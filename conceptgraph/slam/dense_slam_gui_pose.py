@@ -237,7 +237,7 @@ class ReconstructionWindow:
             self.voxel_size_slider.double_value, 16,
             self.est_block_count_slider.int_value, o3c.Tensor(np.eye(4)),
             o3c.Device(self.config.device))
-        self.model.voxel_grid.load(self.config.path_npz)
+        # self.model.voxel_grid.load(self.config.path_npz)
         self.is_started = True
 
         set_enabled(self.fixed_prop_grid, False)
