@@ -15,7 +15,7 @@ class ConfigParser(configargparse.ArgParser):
 
     def __init__(self):
         super().__init__(default_config_files=[
-            os.path.join(os.path.dirname(__file__), 'replica_config.yml')
+            os.path.join(os.path.dirname(__file__), 'default_config.yml')
         ],
                          conflict_handler='resolve')
         path = os.path.join(os.path.dirname(__file__), 'replica_config.yml')
