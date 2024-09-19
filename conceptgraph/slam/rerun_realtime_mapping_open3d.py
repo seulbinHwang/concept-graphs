@@ -606,8 +606,8 @@ class ReconstructionWindow:
                 if self.config.add_noise:
                     xyz_noise, rpy_noise = general_utils.get_noise(
                         max_xyz_noise=0.1, max_angle_noise_deg=3.)
-                    xyz_noise = np.array([0.0, 0.0, 0.0])
-                    rpy_noise = np.array([0.0, 0.0, 0.0])
+                    # xyz_noise = np.array([0.0, 0.0, 0.0])
+                    # rpy_noise = np.array([0.0, 0.0, 0.0])
                     pose_flat_deg_np_gt = general_utils.extract_xyz_rpw(
                         pose_np_gt)
                     T_frame_to_model = general_utils.set_noise(
