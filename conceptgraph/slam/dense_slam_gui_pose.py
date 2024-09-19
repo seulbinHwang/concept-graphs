@@ -413,7 +413,8 @@ class ReconstructionWindow:
                     raycast_frame,
                     float(self.scale_slider.int_value),
                     self.max_slider.double_value,
-                )
+                    self.diff_slider.double_value,
+                    method='hybrid')
                 T_frame_to_model = T_frame_to_model @ result.transformation
                 ################# For logging. (avg_fixed_minus_gt_deg)
                 if config.add_noise:
@@ -487,6 +488,14 @@ class ReconstructionWindow:
             """ noise 주지 않았을 떄
 avg_fixed_minus_gt_deg:  [0.04 0.06 0.03 0.27 0.16 0.23]
 avg_noise_deg:  [0. 0. 0. 0. 0. 0.]
+
+
+-----------------(noise 주었을 때) 아무것도 변경하지 않았을 때---------------------
+avg_fixed_minus_gt_deg:  [0.04 0.05 0.04 1.19 1.06 0.61]
+avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
+avg_fixed_minus_gt_deg - avg_noise_deg:  [ 0.    0.01 -0.   -0.05 -0.19 -0.59]
+-----------------
+
             """
             avg_fixed_minus_gt_deg /= n_files
             avg_noise_deg /= n_files
