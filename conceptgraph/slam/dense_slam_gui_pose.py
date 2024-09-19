@@ -237,8 +237,8 @@ class ReconstructionWindow:
             self.voxel_size_slider.double_value, 16,
             self.est_block_count_slider.int_value, o3c.Tensor(np.eye(4)),
             o3c.Device(self.config.device))
-        # self.model.voxel_grid = self.model.voxel_grid.load(self.config.path_npz)
-        # raise NotImplementedError("Please implement the rest of the method.")
+        self.model.voxel_grid = self.model.voxel_grid.load("output2.npz")
+        raise NotImplementedError("Please implement the rest of the method.")
         self.is_started = True
 
         set_enabled(self.fixed_prop_grid, False)
