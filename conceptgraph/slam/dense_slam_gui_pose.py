@@ -237,6 +237,7 @@ class ReconstructionWindow:
             self.voxel_size_slider.double_value, 16,
             self.est_block_count_slider.int_value, o3c.Tensor(np.eye(4)),
             o3c.Device(self.config.device))
+        self.model.voxel_grid.load(self.config.path_npz)
         self.is_started = True
 
         set_enabled(self.fixed_prop_grid, False)
@@ -525,6 +526,12 @@ avg_fixed_minus_gt_deg - avg_noise_deg:  [-0.01 -0.01 -0.   -0.13 -0.53 -0.5 ]
 avg_fixed_minus_gt_deg:  [0.03 0.03 0.03 1.12 0.72 0.7 ]
 avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
 avg_fixed_minus_gt_deg - avg_noise_deg:  [-0.01 -0.01 -0.01 -0.12 -0.52 -0.5 ]
+-----------------
+----------------- (noise 주었을 때) update 시 clipping 했을 때 + voxel size = 0.008 (효과 미미)
+- 그래도 map은 좀 더 깔끔하게 나오는 것 같음.
+avg_fixed_minus_gt_deg:  [0.03 0.03 0.03 1.06 0.71 0.71]
+avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
+avg_fixed_minus_gt_deg - avg_noise_deg:  [-0.01 -0.01 -0.01 -0.18 -0.53 -0.49]
 -----------------
 
 
