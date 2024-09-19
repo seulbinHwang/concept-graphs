@@ -881,17 +881,17 @@ class ReconstructionWindow:
             """
             edges = []
             captions = []
-            # labels, edges, _, captions = make_vlm_edges_and_captions(
-            #     bgr_np,
-            #     curr_det,
-            #     self.obj_classes,
-            #     detection_class_labels,
-            #     self.det_exp_vis_path,
-            #     color_path,
-            #     self.cfg.make_edges,
-            #     self.openai_client,
-            #     self.frame_idx,
-            #     save_result=True)
+            labels, edges, _, captions = make_vlm_edges_and_captions(
+                bgr_np,
+                curr_det,
+                self.obj_classes,
+                detection_class_labels,
+                self.det_exp_vis_path,
+                color_path,
+                self.cfg.make_edges,
+                self.openai_client,
+                self.frame_idx,
+                save_result=True)
             # TODO: 더비겅이 완료된 후엔, save_result = False로 해야함.
             ##### 1.2. [끝]
             """

@@ -11,7 +11,7 @@ defaults:
 
 detections_exp_suffix: s_detections_stride10 # helpful label to identify your detections
 force_detection: !!bool False
-save_detections: !!bool False
+save_detections: !!bool True
 
 make_edges: !!bool True
 
