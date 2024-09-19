@@ -15,7 +15,7 @@ save_detections: !!bool True
 
 make_edges: !!bool True
 
-stride: 50 # 10
+stride: 10 # 10
 exp_suffix: r_mapping_stride10 # helpful label to identify your mapping experiment
 
 save_video: !!bool False
