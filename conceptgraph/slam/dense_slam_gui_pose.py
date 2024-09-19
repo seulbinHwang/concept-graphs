@@ -378,6 +378,7 @@ class ReconstructionWindow:
 
         start = time.time()
         while not self.is_done:
+            skip_flag = False
             if not self.is_started or not self.is_running:
                 time.sleep(0.05)
                 continue
@@ -415,7 +416,17 @@ class ReconstructionWindow:
                     self.max_slider.double_value,
                     self.diff_slider.double_value)
                     # o3d.t.pipelines.odometry.Method.Hybrid)
-                T_frame_to_model = T_frame_to_model @ result.transformation
+                transform_pose_flat_deg_np = general_utils.extract_xyz_rpw(
+                    result.transformation.cpu().numpy())
+                transform_position_np = transform_pose_flat_deg_np[:3]
+                transform_rpy_np = transform_pose_flat_deg_np[3:]
+                if transform_position_np.sum() > 0.2 or transform_rpy_np.sum(
+                ) > 10:
+                    print("Large transformation detected. Skipping frame.")
+                    skip_flag = True
+                else:
+                    T_frame_to_model = T_frame_to_model @ result.transformation
+
                 ################# For logging. (avg_fixed_minus_gt_deg)
                 if config.add_noise:
                     recovered_pose_np = T_frame_to_model.cpu().numpy()
@@ -425,13 +436,13 @@ class ReconstructionWindow:
                                                 pose_flat_deg_np_gt)
                     avg_fixed_minus_gt_deg += fixed_minus_gt_deg
                 ##################
-
-            self.poses.append(T_frame_to_model.cpu().numpy())
-            self.model.update_frame_pose(self.idx, T_frame_to_model)
-            self.model.integrate(input_frame,
-                                 float(self.scale_slider.int_value),
-                                 self.max_slider.double_value,
-                                 self.trunc_multiplier_slider.double_value)
+            if not skip_flag:
+                self.poses.append(T_frame_to_model.cpu().numpy())
+                self.model.update_frame_pose(self.idx, T_frame_to_model)
+                self.model.integrate(input_frame,
+                                     float(self.scale_slider.int_value),
+                                     self.max_slider.double_value,
+                                     self.trunc_multiplier_slider.double_value)
 
             if (self.idx % self.interval_slider.int_value == 0 and
                     self.update_box.checked) \
@@ -443,11 +454,11 @@ class ReconstructionWindow:
                 self.is_scene_updated = True
             else:
                 self.is_scene_updated = False
-
-            frustum = o3d.geometry.LineSet.create_camera_visualization(
-                color.columns, color.rows, intrinsic.numpy(),
-                np.linalg.inv(T_frame_to_model.cpu().numpy()), 0.2)
-            frustum.paint_uniform_color([0.961, 0.475, 0.000])
+            if not skip_flag:
+                frustum = o3d.geometry.LineSet.create_camera_visualization(
+                    color.columns, color.rows, intrinsic.numpy(),
+                    np.linalg.inv(T_frame_to_model.cpu().numpy()), 0.2)
+                frustum.paint_uniform_color([0.961, 0.475, 0.000])
 
             # Output FPS
             if (self.idx % fps_interval_len == 0):
@@ -472,13 +483,12 @@ class ReconstructionWindow:
                 self.est_point_count_slider.int_value)
 
             self.output_info.text = info
-            if self.idx > 0:
-                gui.Application.instance.post_to_main_thread(
-                    self.window, lambda: self.update_render(
-                        input_frame.get_data_as_image('depth'),
-                        input_frame.get_data_as_image('color'),
-                        raycast_frame.get_data_as_image('depth'),
-                        raycast_frame.get_data_as_image('color'), pcd, frustum))
+            gui.Application.instance.post_to_main_thread(
+                self.window, lambda: self.update_render(
+                    input_frame.get_data_as_image('depth'),
+                    input_frame.get_data_as_image('color'),
+                    raycast_frame.get_data_as_image('depth'),
+                    raycast_frame.get_data_as_image('color'), pcd, frustum))
 
             self.idx += 1
             self.is_done = self.is_done | (self.idx >= n_files)
@@ -511,7 +521,7 @@ avg_fixed_minus_gt_deg:  [0.03 0.03 0.04 1.11 0.71 0.7 ]
 avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
 avg_fixed_minus_gt_deg - avg_noise_deg:  [-0.01 -0.01 -0.   -0.13 -0.53 -0.5 ]
 -----------------
------------------
+-----------------(noise 주었을 때) FOV 1.5배 + voxel size = 0.008 (효과 미미)
 avg_fixed_minus_gt_deg:  [0.03 0.03 0.03 1.12 0.72 0.7 ]
 avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
 avg_fixed_minus_gt_deg - avg_noise_deg:  [-0.01 -0.01 -0.01 -0.12 -0.52 -0.5 ]
