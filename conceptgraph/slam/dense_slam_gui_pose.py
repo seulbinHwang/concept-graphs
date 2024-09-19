@@ -60,7 +60,7 @@ class ReconstructionWindow:
         self.fixed_prop_grid.add_child(self.scale_slider)
         voxel_size_label = gui.Label('Voxel size')
         self.voxel_size_slider = gui.Slider(gui.Slider.DOUBLE)
-        self.voxel_size_slider.set_limits(0.003, 0.01)
+        self.voxel_size_slider.set_limits(0.003, 0.1)
         self.voxel_size_slider.double_value = config.voxel_size
         self.fixed_prop_grid.add_child(voxel_size_label)
         self.fixed_prop_grid.add_child(self.voxel_size_slider)
@@ -494,6 +494,11 @@ avg_noise_deg:  [0. 0. 0. 0. 0. 0.]
 avg_fixed_minus_gt_deg:  [0.04 0.05 0.04 1.19 1.06 0.61]
 avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
 avg_fixed_minus_gt_deg - avg_noise_deg:  [ 0.    0.01 -0.   -0.05 -0.19 -0.59]
+-----------------
+-----------------(noise 주었을 때) hybrid로 돌려보았을 때 ---------------------
+avg_fixed_minus_gt_deg:  [0.03 0.04 0.04 1.2  1.13 1.16]
+avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
+avg_fixed_minus_gt_deg - avg_noise_deg:  [-0.01 -0.   -0.   -0.04 -0.11 -0.04]
 -----------------
 
             """

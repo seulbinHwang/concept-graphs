@@ -21,7 +21,7 @@ icp_distance_thr: 0.07
 global_registration_method: ransac
 registration_loop_weight: 0.1
 integrate_color: true
-voxel_size: 0.05
+voxel_size: 0.005
 trunc_voxel_multiplier: 8.0
 block_count: 4000
 est_point_count: 8000000
