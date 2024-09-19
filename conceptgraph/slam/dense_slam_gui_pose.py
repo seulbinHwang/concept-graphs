@@ -433,7 +433,8 @@ class ReconstructionWindow:
                 if transform_position_np.sum() > 0.2 or transform_rpy_np.sum(
                 ) > 10:
                     print("Large transformation detected. Skipping frame.")
-                    skip_flag = True
+                    skip_flag = False
+                    T_frame_to_model = T_frame_to_model @ result.transformation
                 else:
                     T_frame_to_model = T_frame_to_model @ result.transformation
 
