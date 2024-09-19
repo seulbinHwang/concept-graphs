@@ -237,7 +237,7 @@ class ReconstructionWindow:
             self.voxel_size_slider.double_value, 16,
             self.est_block_count_slider.int_value, o3c.Tensor(np.eye(4)),
             o3c.Device(self.config.device))
-        if os.path.exists("output2.npz"):
+        if os.path.exists("output.npz"):
             vbg = o3d.t.geometry.VoxelBlockGrid(
                 attr_names=('tsdf', 'weight', 'color'),
                 attr_dtypes=(o3c.float32, o3c.float32, o3c.float32),
@@ -246,7 +246,7 @@ class ReconstructionWindow:
                 block_resolution=16,
                 block_count=self.est_block_count_slider.int_value,
                 device=o3c.Device(self.config.device))
-            self.model.voxel_grid = vbg.load("output2.npz")
+            self.model.voxel_grid = vbg.load("output.npz")
         self.is_started = True
 
         set_enabled(self.fixed_prop_grid, False)
@@ -381,7 +381,7 @@ class ReconstructionWindow:
         pcd = None
 
         ##########################################
-        np.random.seed(42)
+        # np.random.seed(42)
         avg_fixed_minus_gt_deg = np.zeros(6)
         avg_noise_deg = np.zeros(6)
         ##########################################
