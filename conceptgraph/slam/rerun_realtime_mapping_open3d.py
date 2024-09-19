@@ -562,8 +562,14 @@ class ReconstructionWindow:
         else:
             T_frame_to_model = o3c.Tensor(np.identity(4))
         device = o3d.core.Device(self.config.device)
-        depth_ref = o3d.t.io.read_image(depth_file_names[0]).resize(self.args.resize_ratio)
-        color_ref = o3d.t.io.read_image(color_file_names[0]).resize(self.args.resize_ratio)
+        if self.args.resize_ratio < 1.:
+            depth_ref = o3d.t.io.read_image(depth_file_names[0]).resize(self.args.resize_ratio)
+            color_ref = o3d.t.io.read_image(color_file_names[0]).resize(self.args.resize_ratio)
+        elif self.args.resize_ratio == 1.:
+            depth_ref = o3d.t.io.read_image(depth_file_names[0])
+            color_ref = o3d.t.io.read_image(color_file_names[0])
+        else:
+            raise ValueError("Invalid resize ratio")
         input_frame = o3d.t.pipelines.slam.Frame(depth_ref.rows,
                                                  depth_ref.columns, intrinsic,
                                                  device)
@@ -594,9 +600,14 @@ class ReconstructionWindow:
             if not self.is_started or not self.is_running:
                 time.sleep(0.05)
                 continue
-
-            depth = o3d.t.io.read_image(depth_file_names[self.idx]).resize(self.args.resize_ratio).to(device)
-            color = o3d.t.io.read_image(color_file_names[self.idx]).resize(self.args.resize_ratio).to(device)
+            if self.args.resize_ratio < 1.:
+                depth = o3d.t.io.read_image(depth_file_names[self.idx]).resize(self.args.resize_ratio).to(device)
+                color = o3d.t.io.read_image(color_file_names[self.idx]).resize(self.args.resize_ratio).to(device)
+            elif self.args.resize_ratio == 1.:
+                depth = o3d.t.io.read_image(depth_file_names[self.idx]).to(device)
+                color = o3d.t.io.read_image(color_file_names[self.idx]).to(device)
+            else:
+                raise ValueError("Invalid resize ratio")
 
             input_frame.set_data_from_image('depth', depth)
             input_frame.set_data_from_image('color', color)
@@ -1488,7 +1499,7 @@ def main(cfg: DictConfig):
                         help="Confidence threshold for detection")
     parser.add_argument('--resize_ratio',
                         type=float,
-                        default=0.5,
+                        default=1.,
                         help="Resize ratio for the image")
     parser.add_argument(
         '--obj_pcd_max_points',
