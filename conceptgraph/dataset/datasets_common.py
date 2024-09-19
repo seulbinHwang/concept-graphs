@@ -189,7 +189,8 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         if self.load_embeddings:
             self.embedding_paths = self.embedding_paths[self.start:self.
                                                         end:stride]
-        self.poses = self.poses[self.start:self.end:stride]
+        if self.poses is not None:
+            self.poses = self.poses[self.start:self.end:stride]
         # Tensor of retained indices (indices of frames and poses that were retained)
         self.retained_inds = torch.arange(
             self.num_imgs)[self.start:self.end:stride]
@@ -197,11 +198,15 @@ class GradSLAMDataset(torch.utils.data.Dataset):
         self.num_imgs = len(self.color_paths)
 
         # self.transformed_poses = datautils.poses_to_transforms(self.poses)
-        self.poses = torch.stack(self.poses)
-        if self.relative_pose:
-            self.transformed_poses = self._preprocess_poses(self.poses)
+        if self.poses is None:
+            self.transformed_poses = None
         else:
-            self.transformed_poses = self.poses
+            self.poses = torch.stack(self.poses)
+            if self.relative_pose:
+                self.transformed_poses = self._preprocess_poses(self.poses)
+            else:
+                self.transformed_poses = self.poses
+
 
     def __len__(self):
         return self.num_imgs
@@ -527,6 +532,89 @@ class ReplicaDataset(GradSLAMDataset):
         return embedding.permute(0, 2, 3, 1)  # (1, H, W, embedding_dim)
 
 
+class RealsenseDataset(GradSLAMDataset):
+
+    def __init__(
+            self,
+            # from dataset/dataconfigs/realsense/realsense.yaml
+            config_dict,
+            basedir,  # Replica #####
+            sequence,  # room0 #####
+            stride: Optional[int] = None,  # 50
+            start: Optional[int] = 0,
+            end: Optional[int] = -1,
+            desired_height: Optional[int] = 480,  # None
+            desired_width: Optional[int] = 640,  # None
+            load_embeddings: Optional[bool] = False,
+            embedding_dir: Optional[str] = "embeddings",
+            embedding_dim: Optional[int] = 512,
+            **kwargs,  #####
+    ):
+        """
+            **kwargs:
+        device="cpu",
+        dtype=torch.float,
+        """
+        # input_folder: realsense
+        self.input_folder = os.path.join(basedir)
+        self.pose_path = os.path.join(self.input_folder, "traj.txt")
+        super().__init__(
+            config_dict,
+            stride=stride,
+            start=start,
+            end=end,
+            desired_height=desired_height,
+            desired_width=desired_width,
+            load_embeddings=load_embeddings,
+            embedding_dir=embedding_dir,
+            embedding_dim=embedding_dim,
+            **kwargs,
+        )
+
+    def get_filepaths(self):
+        depth_folder = os.path.join(self.input_folder, "depth")
+        # Only 16-bit png depth is supported
+        depth_file_names = glob.glob(os.path.join(depth_folder, '*.png'))
+        n_depth = len(depth_file_names)
+        if n_depth == 0:
+            print(f'Depth image not found in {depth_folder}, abort!')
+            depth_paths = []
+        else:
+            depth_paths = sorted(depth_file_names)
+        if len(depth_paths) == 0:
+            return [], [], None
+        color_folder = os.path.join(self.input_folder, "color")
+        extensions = ['*.png', '*.jpg']
+        for ext in extensions:
+            color_paths = glob.glob(os.path.join(color_folder, ext))
+            if len(color_paths) == len(depth_paths):
+                return depth_paths, sorted(color_paths), None
+        raise ValueError(
+            f'Found {len(depth_paths)} depth images in {depth_folder}, but cannot find matched number of color images in {color_folder} with extensions {extensions}, abort!'
+        )
+
+    def load_poses(self):
+        poses = []
+        try:
+            with open(self.pose_path, "r") as f:
+                lines = f.readlines()
+            for i in range(self.num_imgs):
+                line = lines[i]
+                c2w = np.array(list(map(float, line.split()))).reshape(4, 4)
+                # c2w[:3, 1] *= -1
+                # c2w[:3, 2] *= -1
+                c2w = torch.from_numpy(c2w).float()
+                poses.append(c2w)
+        except:
+            print("No pose file found. Returning empty poses.")
+            return None
+        return poses
+
+    def read_embedding_from_file(self, embedding_file_path):
+        embedding = torch.load(embedding_file_path)
+        return embedding.permute(0, 2, 3, 1)  # (1, H, W, embedding_dim)
+
+
 class ScannetDataset(GradSLAMDataset):
 
     def __init__(
@@ -758,69 +846,69 @@ class AzureKinectDataset(GradSLAMDataset):
         return embedding  # .permute(0, 2, 3, 1)  # (1, H, W, embedding_dim)
 
 
-class RealsenseDataset(GradSLAMDataset):
-    """
-    Dataset class to process depth images captured by realsense camera on the tabletop manipulator 
-    """
-
-    def __init__(
-        self,
-        config_dict,
-        basedir,
-        sequence,
-        stride: Optional[int] = None,
-        start: Optional[int] = 0,
-        end: Optional[int] = -1,
-        desired_height: Optional[int] = 480,
-        desired_width: Optional[int] = 640,
-        load_embeddings: Optional[bool] = False,
-        embedding_dir: Optional[str] = "embeddings",
-        embedding_dim: Optional[int] = 512,
-        **kwargs,
-    ):
-        self.input_folder = os.path.join(basedir, sequence)
-        # only poses/images/depth corresponding to the realsense_camera_order are read/used
-        self.pose_path = os.path.join(self.input_folder, "poses")
-        super().__init__(
-            config_dict,
-            stride=stride,
-            start=start,
-            end=end,
-            desired_height=desired_height,
-            desired_width=desired_width,
-            load_embeddings=load_embeddings,
-            embedding_dir=embedding_dir,
-            embedding_dim=embedding_dim,
-            **kwargs,
-        )
-
-    def get_filepaths(self):
-        color_paths = natsorted(
-            glob.glob(os.path.join(self.input_folder, "rgb", "*.jpg")))
-        depth_paths = natsorted(
-            glob.glob(os.path.join(self.input_folder, "depth", "*.png")))
-        embedding_paths = None
-        if self.load_embeddings:
-            embedding_paths = natsorted(
-                glob.glob(f"{self.input_folder}/{self.embedding_dir}/*.pt"))
-        return color_paths, depth_paths, embedding_paths
-
-    def load_poses(self):
-        posefiles = natsorted(glob.glob(os.path.join(self.pose_path, "*.npy")))
-        poses = []
-        P = torch.tensor([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0],
-                          [0, 0, 0, 1]]).float()
-        for posefile in posefiles:
-            c2w = torch.from_numpy(np.load(posefile)).float()
-            _R = c2w[:3, :3]
-            _t = c2w[:3, 3]
-            _pose = P @ c2w @ P.T
-            poses.append(_pose)
-        return poses
-
-    def read_embedding_from_file(self, embedding_file_path):
-        embedding = torch.load(embedding_file_path)
-        return embedding.permute(0, 2, 3, 1)  # (1, H, W, embedding_dim)
+# class RealsenseDataset(GradSLAMDataset):
+#     """
+#     Dataset class to process depth images captured by realsense camera on the tabletop manipulator
+#     """
+#
+#     def __init__(
+#         self,
+#         config_dict,
+#         basedir,
+#         sequence,
+#         stride: Optional[int] = None,
+#         start: Optional[int] = 0,
+#         end: Optional[int] = -1,
+#         desired_height: Optional[int] = 480,
+#         desired_width: Optional[int] = 640,
+#         load_embeddings: Optional[bool] = False,
+#         embedding_dir: Optional[str] = "embeddings",
+#         embedding_dim: Optional[int] = 512,
+#         **kwargs,
+#     ):
+#         self.input_folder = os.path.join(basedir, sequence)
+#         # only poses/images/depth corresponding to the realsense_camera_order are read/used
+#         self.pose_path = os.path.join(self.input_folder, "poses")
+#         super().__init__(
+#             config_dict,
+#             stride=stride,
+#             start=start,
+#             end=end,
+#             desired_height=desired_height,
+#             desired_width=desired_width,
+#             load_embeddings=load_embeddings,
+#             embedding_dir=embedding_dir,
+#             embedding_dim=embedding_dim,
+#             **kwargs,
+#         )
+#
+#     def get_filepaths(self):
+#         color_paths = natsorted(
+#             glob.glob(os.path.join(self.input_folder, "rgb", "*.jpg")))
+#         depth_paths = natsorted(
+#             glob.glob(os.path.join(self.input_folder, "depth", "*.png")))
+#         embedding_paths = None
+#         if self.load_embeddings:
+#             embedding_paths = natsorted(
+#                 glob.glob(f"{self.input_folder}/{self.embedding_dir}/*.pt"))
+#         return color_paths, depth_paths, embedding_paths
+#
+#     def load_poses(self):
+#         posefiles = natsorted(glob.glob(os.path.join(self.pose_path, "*.npy")))
+#         poses = []
+#         P = torch.tensor([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0],
+#                           [0, 0, 0, 1]]).float()
+#         for posefile in posefiles:
+#             c2w = torch.from_numpy(np.load(posefile)).float()
+#             _R = c2w[:3, :3]
+#             _t = c2w[:3, 3]
+#             _pose = P @ c2w @ P.T
+#             poses.append(_pose)
+#         return poses
+#
+#     def read_embedding_from_file(self, embedding_file_path):
+#         embedding = torch.load(embedding_file_path)
+#         return embedding.permute(0, 2, 3, 1)  # (1, H, W, embedding_dim)
 
 
 class Record3DDataset(GradSLAMDataset):

@@ -1,7 +1,7 @@
 defaults:
   - base
   - base_mapping
-  - replica
+  - realsense
 #  - record3d
   - sam
   - classes
