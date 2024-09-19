@@ -100,7 +100,7 @@ class ReconstructionWindow:
         ### Depth max slider
         max_label = gui.Label('Depth max')
         self.max_slider = gui.Slider(gui.Slider.DOUBLE)
-        self.max_slider.set_limits(3.0, 6.0)
+        self.max_slider.set_limits(3.0, 20.0)
         self.max_slider.double_value = config.depth_max
         self.adjustable_prop_grid.add_child(max_label)
         self.adjustable_prop_grid.add_child(self.max_slider)

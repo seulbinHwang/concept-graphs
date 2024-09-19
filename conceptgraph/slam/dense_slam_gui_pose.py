@@ -484,7 +484,7 @@ class ReconstructionWindow:
 
         time.sleep(0.5)
         if config.add_noise:
-            """
+            """ noise 주지 않았을 떄
 avg_fixed_minus_gt_deg:  [0.04 0.06 0.03 0.27 0.16 0.23]
 avg_noise_deg:  [0. 0. 0. 0. 0. 0.]
             """
@@ -494,6 +494,8 @@ avg_noise_deg:  [0. 0. 0. 0. 0. 0.]
             print("avg_fixed_minus_gt_deg: ", np.round(avg_fixed_minus_gt_deg,
                                                        2))
             print("avg_noise_deg: ", np.round(avg_noise_deg, 2))
+            print("avg_fixed_minus_gt_deg - avg_noise_deg: ",
+                  np.round(avg_fixed_minus_gt_deg - avg_noise_deg, 2))
             print("-----------------")
 
 
