@@ -1,6 +1,6 @@
 name: Default reconstruction system config
 fragment_size: 100
-device: CUDA:0
+device: CUDA:1
 engine: tensor
 multiprocessing: false
 path_dataset: 'replica'
