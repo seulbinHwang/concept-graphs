@@ -414,7 +414,7 @@ class ReconstructionWindow:
                     float(self.scale_slider.int_value),
                     self.max_slider.double_value,
                     self.diff_slider.double_value,
-                    method='hybrid')
+                    o3d.t.pipelines.odometry.Method.Hybrid)
                 T_frame_to_model = T_frame_to_model @ result.transformation
                 ################# For logging. (avg_fixed_minus_gt_deg)
                 if config.add_noise:
