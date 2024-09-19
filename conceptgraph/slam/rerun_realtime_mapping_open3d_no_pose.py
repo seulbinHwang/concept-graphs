@@ -1425,7 +1425,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
 
 @hydra.main(version_base=None,
             config_path="../hydra_configs/",
-            config_name="rerun_realtime_mapping")
+            config_name="realsense_realtime_mapping")
 def main(cfg: DictConfig):
     parser = ConfigParser()
     """ 얘가 default_config.yml을 읽어서 config를 만들어줌
