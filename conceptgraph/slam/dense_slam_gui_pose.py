@@ -472,13 +472,13 @@ class ReconstructionWindow:
                 self.est_point_count_slider.int_value)
 
             self.output_info.text = info
-
-            gui.Application.instance.post_to_main_thread(
-                self.window, lambda: self.update_render(
-                    input_frame.get_data_as_image('depth'),
-                    input_frame.get_data_as_image('color'),
-                    raycast_frame.get_data_as_image('depth'),
-                    raycast_frame.get_data_as_image('color'), pcd, frustum))
+            if self.idx > 0:
+                gui.Application.instance.post_to_main_thread(
+                    self.window, lambda: self.update_render(
+                        input_frame.get_data_as_image('depth'),
+                        input_frame.get_data_as_image('color'),
+                        raycast_frame.get_data_as_image('depth'),
+                        raycast_frame.get_data_as_image('color'), pcd, frustum))
 
             self.idx += 1
             self.is_done = self.is_done | (self.idx >= n_files)
