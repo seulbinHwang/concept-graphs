@@ -354,15 +354,15 @@ class ReconstructionWindow:
         input_frame = o3d.t.pipelines.slam.Frame(depth_ref.rows,
                                                  depth_ref.columns, intrinsic,
                                                  device)
-        raycast_frame = o3d.t.pipelines.slam.Frame(int(depth_ref.rows*1.2),
-                                                   int(depth_ref.columns*1.2), intrinsic,
+        raycast_frame = o3d.t.pipelines.slam.Frame(int(depth_ref.rows*1.),
+                                                   int(depth_ref.columns*1.), intrinsic,
                                                    device)
 
         input_frame.set_data_from_image('depth', depth_ref)
         input_frame.set_data_from_image('color', color_ref)
 
-        # raycast_frame.set_data_from_image('depth', depth_ref)
-        # raycast_frame.set_data_from_image('color', color_ref)
+        raycast_frame.set_data_from_image('depth', depth_ref)
+        raycast_frame.set_data_from_image('color', color_ref)
 
         gui.Application.instance.post_to_main_thread(
             self.window, lambda: self.init_render(depth_ref, color_ref))
@@ -506,6 +506,17 @@ avg_fixed_minus_gt_deg:  [0.03 0.03 0.03 1.08 0.7  0.69]
 avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
 avg_fixed_minus_gt_deg - avg_noise_deg:  [-0.01 -0.01 -0.01 -0.16 -0.54 -0.51]
 -----------------
+-----------------(noise 주었을 때) FOV 1.2배 + voxel size = 0.008 (효과 미미)
+avg_fixed_minus_gt_deg:  [0.03 0.03 0.04 1.11 0.71 0.7 ]
+avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
+avg_fixed_minus_gt_deg - avg_noise_deg:  [-0.01 -0.01 -0.   -0.13 -0.53 -0.5 ]
+-----------------
+-----------------
+avg_fixed_minus_gt_deg:  [0.03 0.03 0.03 1.12 0.72 0.7 ]
+avg_noise_deg:  [0.04 0.04 0.04 1.24 1.24 1.2 ]
+avg_fixed_minus_gt_deg - avg_noise_deg:  [-0.01 -0.01 -0.01 -0.12 -0.52 -0.5 ]
+-----------------
+
 
             """
             avg_fixed_minus_gt_deg /= n_files
