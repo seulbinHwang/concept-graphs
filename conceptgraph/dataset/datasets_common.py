@@ -351,8 +351,10 @@ Returns:
             K, self.height_downsample_ratio, self.width_downsample_ratio)
         intrinsics = torch.eye(4).to(K)
         intrinsics[:3, :3] = K
-
-        pose = self.transformed_poses[index]
+        if self.transformed_poses is None:
+            pose = None
+        else:
+            pose = self.transformed_poses[index].to(self.device).type(self.dtype)
 
         if self.load_embeddings:
             embedding = self.read_embedding_from_file(
@@ -361,7 +363,7 @@ Returns:
                 color.to(self.device).type(self.dtype),
                 depth.to(self.device).type(self.dtype),
                 intrinsics.to(self.device).type(self.dtype),
-                pose.to(self.device).type(self.dtype),
+                pose,
                 embedding.to(
                     self.device),  # Allow embedding to be another dtype
                 # self.retained_inds[index].item(),
@@ -371,7 +373,7 @@ Returns:
             color.to(self.device).type(self.dtype),
             depth.to(self.device).type(self.dtype),
             intrinsics.to(self.device).type(self.dtype),
-            pose.to(self.device).type(self.dtype),
+            pose
             # self.retained_inds[index].item(),
         )
 
