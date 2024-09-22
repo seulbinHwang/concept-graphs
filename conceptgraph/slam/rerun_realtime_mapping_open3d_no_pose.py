@@ -72,7 +72,7 @@ from conceptgraph.slam.utils import (
 from conceptgraph.slam.mapping import (compute_spatial_similarities,
                                        compute_visual_similarities,
                                        aggregate_similarities,
-                                       match_detections_to_objects,
+                                       match_detections_to_objects, match_each_detections_to_objects,
                                        merge_obj_matches)
 from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
@@ -89,7 +89,7 @@ RUN_OPEN_API = False
 RUN_START = False
 RUN_MIDDLE = False
 RUN_AFTER = False
-DO_CONCEPT = False
+DO_CONCEPT = True
 
 def set_enabled(widget, enable):
     widget.enabled = enable
@@ -298,7 +298,7 @@ class ReconstructionWindow:
         self.map_edges = MapEdgeMapping(self.objects)
 
 
-        exp_path = "./Datasets/Replica/room0/exps"
+        exp_path = f"{self.cfg.dataset_root}/{self.cfg.scene_id}/exps"
         if os.path.exists(exp_path):
             user_input = input(
                 f"The folder {exp_path} already exists. Do you want to delete it? (y/n): "
@@ -455,22 +455,23 @@ class ReconstructionWindow:
         self.is_done = True
 
         if self.is_started:
+            if DO_CONCEPT:
+                self.wrap_up()
             print('Saving model to {}...'.format(self.config.path_npz))
             self.model.voxel_grid.save(self.config.path_npz)
             print('Finished.')
 
-            mesh_fname = '.'.join(self.config.path_npz.split('.')[:-1]) + '.ply'
-            print('Extracting and saving mesh to {}...'.format(mesh_fname))
-            mesh = extract_trianglemesh(self.model.voxel_grid, self.config,
-                                        mesh_fname)
-            print('Finished.')
+            # mesh_fname = '.'.join(self.config.path_npz.split('.')[:-1]) + '.ply'
+            # print('Extracting and saving mesh to {}...'.format(mesh_fname))
+            # mesh = extract_trianglemesh(self.model.voxel_grid, self.config,
+            #                             mesh_fname)
+            # print('Finished.')
 
             log_fname = '.'.join(self.config.path_npz.split('.')[:-1]) + '.log'
             print('Saving trajectory to {}...'.format(log_fname))
             save_poses(log_fname, self.poses)
             print('Finished.')
-            if DO_CONCEPT:
-                self.wrap_up()
+
         return True
 
     def init_render(self, depth_ref, color_ref):
@@ -546,7 +547,7 @@ class ReconstructionWindow:
 
     # Major loop
     def update_main(self):
-        depth_file_names, color_file_names = load_rgbd_file_names(self.config)
+        depth_file_names, color_file_names = load_rgbd_file_names(self.config, descending=False)
 
         # intrinsic: intrinsic_matrix Tensor
         intrinsic = load_intrinsic(self.config)
@@ -723,6 +724,7 @@ class ReconstructionWindow:
                     raycast_frame.get_data_as_image('color'), pcd, frustum))
 
             self.idx += 1
+            print("idx: ", self.idx)
             self.is_done = self.is_done | (self.idx >= n_files)
 
         time.sleep(0.5)
@@ -1073,6 +1075,8 @@ camera_pose.shape: (4, 4)
             spatial_sim_type=self.cfg.spatial_sim_type,  # overlap
             obj_pcd_max_points=self.cfg.obj_pcd_max_points,  # 5000
             device=self.cfg.device,
+            depth_min=self.config.depth_min,
+            depth_max=self.config.depth_max,
         )
         ##### 2.1. [끝] 3d pointcloud 만들기
         for obj in obj_pcds_and_bboxes:
@@ -1150,10 +1154,14 @@ camera_pose.shape: (4, 4)
 
         # Perform matching of detections to existing self.objects .
         # match_indices: 길이는 "새 검지 개수"
-        match_indices: List[Optional[int]] = match_detections_to_objects(
-            agg_sim=agg_sim,
-            detection_threshold=self.cfg['sim_threshold']  # 1.2
-        )
+        match_indices = match_each_detections_to_objects(spatial_sim, visual_sim,
+                                                         physical_threshold=self.cfg['physical_threshold'],
+                                                         semantic_threshold=self.cfg['semantic_threshold'])
+        # match_indices: List[Optional[int]] = match_detections_to_objects(
+        #     agg_sim=agg_sim,
+        #     detection_threshold=self.cfg['sim_threshold']  # 1.2
+        # )
+
 
         # 병합 후, downsample 진행하고, dbscan 으로 노이즈 잘라냅니다.
         self.objects = merge_obj_matches(
@@ -1391,6 +1399,7 @@ pcd_save_path = exps/r_mapping_stride10/pcd_r_mapping_stride10.pkl.gz
                     "bbox_volume": 0.21 }, ...
             """
             # /room0/exps/r_mapping_stride10/obj_json_r_mapping_stride10.json
+            print("self.objects: ", self.objects)
             save_obj_json(exp_suffix=self.cfg.exp_suffix,
                           exp_out_path=self.exp_out_path,
                           objects=self.objects)

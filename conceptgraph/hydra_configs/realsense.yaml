@@ -3,5 +3,5 @@ defaults:
 
 dataset_root: ${repo_root}/realsense
 dataset_config: ${repo_root}/conceptgraph/dataset/dataconfigs/realsense/realsense.yaml
-scene_id: realsense
+scene_id: realsense2
 render_camera_path: ${repo_root}/conceptgraph/dataset/dataconfigs/realsense/realsense.json

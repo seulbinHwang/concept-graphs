@@ -170,7 +170,7 @@ def compute_clip_features_batched(
             - 빈 리스트
     """
     image = Image.fromarray(image)
-    padding = 20  # Adjust the padding amount as needed
+    padding = 5  # Adjust the padding amount as needed
 
     image_crops = []
     preprocessed_images = []

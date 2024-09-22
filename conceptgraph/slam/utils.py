@@ -1586,9 +1586,11 @@ def visualize_processed_objects(
 
 
 def _post_process_depth(masks: np.ndarray,
-                        depth_array: np.ndarray) -> np.ndarray:
+                        depth_array: np.ndarray,
+                        depth_min: float,
+                        depth_max: float) -> np.ndarray:
     N, _, _ = masks.shape
-    valid_depth_mask = depth_array > 0.2  # (680, 1200)
+    valid_depth_mask = (depth_array > depth_min) & (depth_array < depth_max)
     # valid_depth_mask -> (N, 680, 1200)
     valid_depth_mask = np.tile(valid_depth_mask, (N, 1, 1))
     masks = masks * valid_depth_mask
@@ -1608,7 +1610,9 @@ def detections_to_obj_pcd_and_bbox(depth_array,
                                    dbscan_eps=None,
                                    dbscan_min_points=None,
                                    run_dbscan=None,
-                                   device='cuda') -> List[Dict[str, Any]]:
+                                   device='cuda',
+                                   depth_min=0.1,
+                                      depth_max=10.0) -> List[Dict[str, Any]]:
     """
 위 함수는 3D 객체 감지 결과를 처리하여,
     - 각 객체의 3D 포인트 클라우드(Point Cloud)와 경계 상자(Bounding Box)를 생성
@@ -1648,7 +1652,7 @@ def detections_to_obj_pcd_and_bbox(depth_array,
 
     """
     N, H, W = masks.shape
-    masks = _post_process_depth(masks, depth_array)
+    masks = _post_process_depth(masks, depth_array, depth_min, depth_max)
 
     # Convert inputs to tensors and move to the specified device
     depth_tensor = torch.from_numpy(depth_array).to(device).float()

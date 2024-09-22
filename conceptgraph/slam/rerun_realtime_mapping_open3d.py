@@ -72,7 +72,7 @@ from conceptgraph.slam.utils import (
 from conceptgraph.slam.mapping import (compute_spatial_similarities,
                                        compute_visual_similarities,
                                        aggregate_similarities,
-                                       match_detections_to_objects,
+                                       match_detections_to_objects, match_each_detections_to_objects,
                                        merge_obj_matches)
 from conceptgraph.utils.model_utils import compute_clip_features_batched
 from conceptgraph.utils.general_utils import get_vis_out_path, cfg_to_dict, check_run_detections
@@ -1070,6 +1070,8 @@ camera_pose.shape: (4, 4)
             spatial_sim_type=self.cfg.spatial_sim_type,  # overlap
             obj_pcd_max_points=self.cfg.obj_pcd_max_points,  # 5000
             device=self.cfg.device,
+            depth_min = self.cfg.depth_min,
+            depth_max = self.cfg.depth_max,
         )
         ##### 2.1. [끝] 3d pointcloud 만들기
         for obj in obj_pcds_and_bboxes:
@@ -1147,10 +1149,13 @@ camera_pose.shape: (4, 4)
 
         # Perform matching of detections to existing self.objects .
         # match_indices: 길이는 "새 검지 개수"
-        match_indices: List[Optional[int]] = match_detections_to_objects(
-            agg_sim=agg_sim,
-            detection_threshold=self.cfg['sim_threshold']  # 1.2
-        )
+        match_indices = match_each_detections_to_objects(spatial_sim, visual_sim,
+                                                         physical_threshold=self.cfg['physical_threshold'],
+                                                         semantic_threshold=self.cfg['semantic_threshold'])
+        # match_indices: List[Optional[int]] = match_detections_to_objects(
+        #     agg_sim=agg_sim,
+        #     detection_threshold=self.cfg['sim_threshold']  # 1.2
+        # )
 
         # 병합 후, downsample 진행하고, dbscan 으로 노이즈 잘라냅니다.
         self.objects = merge_obj_matches(

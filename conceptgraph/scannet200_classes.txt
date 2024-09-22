@@ -1,188 +1,70 @@
 tumbler
-badminton racket
+umbrella
 tooth paste
 headphones
-robot
-alarm clock
 armchair
 backpack
 bag
 bar
-basket
-bathroom cabinet
-bathroom counter
-bathroom stall
-bathroom stall door
-bathroom vanity
-bed
-bench
-bicycle
 bin
-blackboard
-blanket
-blinds
+whiteboard
 board
 book
 bookshelf
 bottle
+shoes
+toothbrush
 bowl
 box
-broom
 bucket
-bulletin board
 cabinet
-calendar
-cart
 case of water bottles
-cd case
-ceiling
-ceiling light
 chair
-clock
 closet
-closet door
-closet rod
-closet wall
+doll
 clothes
 clothes dryer
-coat rack
-coffee kettle
-coffee maker
-coffee table
+hanger
 column
 computer tower
 container
 copier
 couch
-counter
-crate
 cup
-curtain
 cushion
-decoration
 desk
 dining table
-dish rack
-dishwasher
-divider
 door
 doorframe
-dresser
-dumbbell
-end table
-file cabinet
-fire alarm
 fire extinguisher
 fireplace
-floor
+
 folded chair
-furniture
-guitar
-guitar case
-hair dryer
-handicap bar
-hat
 headphones
-ironing board
 jacket
 keyboard
-keyboard piano
-kitchen cabinet
-kitchen counter
-ladder
 lamp
 laptop
-ledge
-light
-light switch
 luggage
-mailbox
-mat
-mattress
-microwave
 mirror
 monitor
 mouse
-music stand
-nightstand
-object
 office chair
-ottoman
-oven
-paper
 paper bag
-paper cutter
-paper towel dispenser
 paper towel roll
-paper towel stand
-piano
 picture
-pillar
 pillow
-pipe
 plant
-plate
-plunger
-poster
 potted plant
-power outlet
-projector
-projector screen
-purse
-rack
-radiator
-rail
-range hood
 recycling bin
-scale
 seat
 shelf
-soccer ball
-shower
-shower curtain
-shower curtain rod
-shower door
-shower floor
-shower head
-shower wall
-sign
-sink
-soap dish
-soap dispenser
 sofa chair
-stair rail
-stairs
-stand
 stool
-storage bin
 storage container
-storage organizer
-stove
-structure
-soccer balls
-suitcase
 table
-telephone
-tissue box
-toaster
-toaster oven
-toilet
 toilet paper
-toilet paper dispenser
-toilet paper holder
-toilet seat cover dispenser
-kingkong
 trash bin
 trash can
-tray
-tube
-vacuum cleaner
-vent
-wall
 wardrobe
 water bottle
-water cooler
-water pitcher
-whiteboard
-window
-windowsill

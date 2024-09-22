@@ -123,13 +123,20 @@ def load_depth_file_names(config):
     return sorted(depth_file_names)
 
 
-def load_rgbd_file_names(config):
+def load_rgbd_file_names(config, descending=False):
     """
     이 함수는 config 객체를 사용하여 데이터셋에서 컬러 및 깊이 이미지 파일들의 경로를 가져옵니다.
     먼저, 깊이 이미지 파일들의 경로를 가져옵니다.
     그다음 컬러 이미지가 있는지 확인하고,
-        만약 깊이 이미지와 컬러 이미지의 개수가 동일하면 파일 경로들을 반환
+        만약 깊이 이미지와 컬러 이미지의 개수가 동일하면 파일 경로들을 반환.
     깊이 이미지와 컬러 이미지의 수가 맞지 않으면 오류 메시지를 출력하고 빈 리스트를 반환합니다.
+
+    Args:
+        config: 데이터셋 정보가 담긴 설정 객체.
+        descending (bool): 내림차순 정렬 여부. 기본값은 False (오름차순).
+
+    Returns:
+        depth_file_names, color_file_names: 깊이 및 컬러 이미지 파일들의 경로.
     """
     depth_file_names = load_depth_file_names(config)
     if len(depth_file_names) == 0:
@@ -140,12 +147,13 @@ def load_rgbd_file_names(config):
     for ext in extensions:
         color_file_names = glob.glob(os.path.join(color_folder, ext))
         if len(color_file_names) == len(depth_file_names):
-            return depth_file_names, sorted(color_file_names)
+            return (sorted(depth_file_names, reverse=descending),
+                    sorted(color_file_names, reverse=descending))
 
     depth_folder = os.path.join(config.path_dataset, config.depth_folder)
     print('Found {} depth images in {}, but cannot find matched number of '
           'color images in {} with extensions {}, abort!'.format(
-              len(depth_file_names), depth_folder, color_folder, extensions))
+        len(depth_file_names), depth_folder, color_folder, extensions))
     return [], []
 
 

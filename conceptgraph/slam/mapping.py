@@ -120,6 +120,34 @@ def match_detections_to_objects(
 
     return match_indices
 
+def match_each_detections_to_objects(
+    spatial_sim: torch.Tensor, visual_sim: torch.Tensor, physical_threshold: float = 0.2,
+semantic_threshold: float = 0.8) -> List[Optional[int]]:
+    """
+    Matches detections to objects based on similarity, returning match indices or None for unmatched.
+
+    Args:
+        agg_sim: Similarity matrix (detections vs. objects).
+        detection_threshold: Threshold for a valid match (default: -inf).
+
+    Returns:
+        List of matching object indices (or None if unmatched) for each detection.
+    """
+    match_indices = []
+    for detected_obj_idx in range(spatial_sim.shape[0]):
+        if spatial_sim[detected_obj_idx].argmax() != visual_sim[detected_obj_idx].argmax():
+            match_indices.append(None)
+        else:
+            max_spatial_sim_value = spatial_sim[detected_obj_idx].max()
+            max_visual_sim_value = visual_sim[detected_obj_idx].max()
+            if max_spatial_sim_value >= physical_threshold and max_visual_sim_value >= semantic_threshold:
+                match_indices.append(spatial_sim[detected_obj_idx].argmax().item())
+            else:
+                match_indices.append(None)
+
+
+    return match_indices
+
 
 def merge_obj_matches(
     detection_list: DetectionList,
