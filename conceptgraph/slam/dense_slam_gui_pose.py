@@ -239,7 +239,7 @@ class ReconstructionWindow:
             o3c.Device(self.config.device))
         if os.path.exists("output.npz"):
             vbg = o3d.t.geometry.VoxelBlockGrid(
-                attr_names=('tsdf', 'weight', 'color'),
+                attr_names=('tsdf', 'weight', 'coflor'),
                 attr_dtypes=(o3c.float32, o3c.float32, o3c.float32),
                 attr_channels=((1), (1), (3)),
                 voxel_size=self.voxel_size_slider.double_value,

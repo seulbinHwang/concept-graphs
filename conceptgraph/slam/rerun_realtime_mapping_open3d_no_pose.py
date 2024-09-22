@@ -632,8 +632,9 @@ class ReconstructionWindow:
                     input_frame,
                     raycast_frame,
                     float(self.scale_slider.int_value),
-                    self.max_slider.double_value,
-                )
+                    self.max_slider.double_value)#, o3d.t.pipelines.odometry.Method.Hybrid)
+                # ,
+                #
                 T_frame_to_model = T_frame_to_model @ result.transformation
                 ################# For logging. (avg_fixed_minus_gt_deg)
                 # if self.config.add_noise:

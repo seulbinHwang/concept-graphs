@@ -7,7 +7,6 @@ alarm clock
 armchair
 backpack
 bag
-ball
 bar
 basket
 bathroom cabinet
@@ -15,7 +14,6 @@ bathroom counter
 bathroom stall
 bathroom stall door
 bathroom vanity
-bathtub
 bed
 bench
 bicycle
@@ -34,7 +32,6 @@ bucket
 bulletin board
 cabinet
 calendar
-candle
 cart
 case of water bottles
 cd case
@@ -72,9 +69,7 @@ door
 doorframe
 dresser
 dumbbell
-dustpan
 end table
-fan
 file cabinet
 fire alarm
 fire extinguisher
@@ -97,19 +92,14 @@ kitchen counter
 ladder
 lamp
 laptop
-laundry basket
-laundry detergent
-laundry hamper
 ledge
 light
 light switch
 luggage
-machine
 mailbox
 mat
 mattress
 microwave
-mini fridge
 mirror
 monitor
 mouse
@@ -136,8 +126,6 @@ plunger
 poster
 potted plant
 power outlet
-power strip
-printer
 projector
 projector screen
 purse
@@ -146,7 +134,6 @@ radiator
 rail
 range hood
 recycling bin
-refrigerator
 scale
 seat
 shelf
@@ -163,7 +150,6 @@ sink
 soap dish
 soap dispenser
 sofa chair
-speaker
 stair rail
 stairs
 stand
@@ -190,13 +176,10 @@ trash bin
 trash can
 tray
 tube
-tv
-tv stand
 vacuum cleaner
 vent
 wall
 wardrobe
-washing machine
 water bottle
 water cooler
 water pitcher
