@@ -89,7 +89,7 @@ RUN_OPEN_API = False
 RUN_START = False
 RUN_MIDDLE = False
 RUN_AFTER = False
-
+DO_CONCEPT = False
 
 def set_enabled(widget, enable):
     widget.enabled = enable
@@ -469,7 +469,8 @@ class ReconstructionWindow:
             print('Saving trajectory to {}...'.format(log_fname))
             save_poses(log_fname, self.poses)
             print('Finished.')
-            self.wrap_up()
+            if DO_CONCEPT:
+                self.wrap_up()
         return True
 
     def init_render(self, depth_ref, color_ref):
@@ -671,8 +672,8 @@ class ReconstructionWindow:
                     f"Shape mismatch: bgr{bgr_np.shape[:2]} vs depth{depth_array.shape}")
 
                 camera_pose_ = T_frame_to_model.cpu().numpy()  # (4, 4)
-
-                self.core_logic(bgr_np, depth_array, camera_pose=camera_pose_)
+                if DO_CONCEPT:
+                    self.core_logic(bgr_np, depth_array, camera_pose=camera_pose_)
 
             if (self.idx % self.interval_slider.int_value == 0 and
                     self.update_box.checked) \
